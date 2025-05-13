@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Enhanced Sun Catcher Polaroid with Background and Text</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@100&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        margin: 0;
+        background-color: #f0f0f0;
+        font-family: Arial, sans-serif;
+        position: relative;
+        --bg-image: none; /* Default background image */
+      }
+      /* Pseudo-element for grayscale background */
+      body::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-image: var(--bg-image);
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        filter: grayscale(100%);
+        z-index: -1;
+        transition: background-image 0.3s;
+      }
+      .polaroid {
+        background: white;
+        padding: 20px 20px 80px 20px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        transition: transform 0.1s;
+        width: 90vw;
+        max-width: 500px;
+        position: relative;
+        text-align: center;
+        filter: none;
+        z-index: 1;
+      }
+      canvas {
+        display: block;
+        width: 100%;
+      }
+      .polaroid-text {
+        font-family: "Inter", sans-serif;
+        font-weight: 100;
+        font-size: 24px;
+        color: #333;
+        position: absolute;
+        bottom: 20px;
+        left: 0;
+        right: 0;
+        margin: 0;
+      }
+      input {
+        margin-top: 20px;
+        position: relative;
+        z-index: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="polaroid" id="polaroid">
+      <canvas id="canvas"></canvas>
+      <div class="polaroid-text">Rainbow</div>
+    </div>
+    <input type="file" id="imageInput" accept="image/*" />
+    <script>
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+      const polaroid = document.getElementById("polaroid");
+      const imageInput = document.getElementById("imageInput");
+      let image = new Image();
+      let tiltX = 0,
+        tiltY = 0,
+        prevTiltX = 0,
+        prevTiltY = 0;
+
+      // Set canvas size dynamically based on Polaroid width
+      function resizeCanvas() {
+        const polaroidWidth = polaroid.offsetWidth;
+        const canvasSize = polaroidWidth - 40; // Account for 20px padding on each side
+        canvas.width = canvasSize;
+        canvas.height = canvasSize; // Square aspect ratio
+        if (image.src) drawImage();
+      }
+      window.addEventListener("resize", resizeCanvas);
+      resizeCanvas();
+
+      // Handle image upload
+      imageInput.addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            image.src = event.target.result;
+            image.onload = () => {
+              drawImage();
+              // Set background image via CSS custom property
+              document.body.style.setProperty(
+                "--bg-image",
+                `url(${image.src})`
+              );
+            };
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+
+      // Create noise texture for glass-like effect
+      function createNoiseTexture(width, height) {
+        const noiseCanvas = document.createElement("canvas");
+        noiseCanvas.width = width;
+        noiseCanvas.height = height;
+        const noiseCtx = noiseCanvas.getContext("2d");
+        const imageData = noiseCtx.createImageData(width, height);
+        for (let i = 0; i < imageData.data.length; i += 4) {
+          const value = Math.random() * 255;
+          imageData.data[i] = value;
+          imageData.data[i + 1] = value;
+          imageData.data[i + 2] = value;
+          imageData.data[i + 3] = 20;
+        }
+        noiseCtx.putImageData(imageData, 0, 0);
+        return noiseCanvas;
+      }
+
+      let noiseTexture = createNoiseTexture(canvas.width, canvas.height);
+      window.addEventListener("resize", () => {
+        noiseTexture = createNoiseTexture(canvas.width, canvas.height);
+      });
+
+      // Draw image with sun catcher effect
+      function drawImage() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+        applySunCatcherEffect();
+      }
+
+      // Enhanced sun catcher effect
+      function applySunCatcherEffect() {
+        ctx.save();
+        const centerX = canvas.width / 2 + tiltX * 50;
+        const centerY = canvas.height / 2 + tiltY * 50;
+        const gradient = ctx.createRadialGradient(
+          centerX,
+          centerY,
+          10,
+          centerX,
+          centerY,
+          canvas.width / 1.5
+        );
+        const hueShift = (Math.abs(tiltX) + Math.abs(tiltY)) * 50;
+        gradient.addColorStop(0, `hsla(${hueShift}, 80%, 70%, 0.4)`);
+        gradient.addColorStop(0.3, `hsla(${hueShift + 60}, 80%, 70%, 0.3)`);
+        gradient.addColorStop(0.6, `hsla(${hueShift + 120}, 80%, 70%, 0.3)`);
+        gradient.addColorStop(1, `hsla(${hueShift + 180}, 80%, 70%, 0.2)`);
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.globalAlpha = 0.1;
+        ctx.drawImage(noiseTexture, 0, 0);
+        ctx.globalAlpha = 1;
+
+        // Sparkles only when tilting
+        const tiltChange =
+          Math.abs(tiltX - prevTiltX) + Math.abs(tiltY - prevTiltY);
+        if (tiltChange > 0.02 && Math.random() < 0.1) {
+          const sparkleX = centerX + (Math.random() - 0.5) * 50;
+          const sparkleY = centerY + (Math.random() - 0.5) * 50;
+          const sparkleGradient = ctx.createRadialGradient(
+            sparkleX,
+            sparkleY,
+            0,
+            sparkleX,
+            sparkleY,
+            10
+          );
+          sparkleGradient.addColorStop(0, "rgba(255, 255, 255, 0.8)");
+          sparkleGradient.addColorStop(1, "rgba(255, 255, 255, 0)");
+          ctx.fillStyle = sparkleGradient;
+          ctx.beginPath();
+          ctx.arc(sparkleX, sparkleY, 10, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      // Handle device orientation for tilt
+      function updateTilt() {
+        polaroid.style.transform = `perspective(1000px) rotateX(${
+          tiltY * 10
+        }deg) rotateY(${tiltX * 10}deg)`;
+        if (image.src) drawImage();
+        prevTiltX = tiltX;
+        prevTiltY = tiltY;
+        requestAnimationFrame(updateTilt);
+      }
+
+      window.addEventListener("deviceorientation", (e) => {
+        tiltX = Math.min(Math.max(e.gamma / 30, -1), 1);
+        tiltY = Math.min(Math.max(e.beta / 30, -1), 1);
+      });
+
+      requestAnimationFrame(updateTilt);
+
+      // Request permission for iOS devices
+      if (typeof DeviceOrientationEvent.requestPermission === "function") {
+        DeviceOrientationEvent.requestPermission()
+          .then((permissionState) => {
+            if (permissionState === "granted") {
+              console.log("Device orientation permission granted");
+            }
+          })
+          .catch(console.error);
+      }
+    </script>
+  </body>
+</html>
