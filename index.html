@@ -21,6 +21,7 @@
         position: relative;
         --bg-image: none; /* Default background image */
       }
+
       /* Pseudo-element for grayscale background */
       body::before {
         content: "";
@@ -37,9 +38,10 @@
         z-index: -1;
         transition: background-image 0.3s;
       }
+
       .polaroid {
         background: white;
-        padding: 20px 20px 80px 20px;
+        padding: 20px 20px 80px 20px; /* Extra bottom padding for Polaroid effect */
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
         transition: transform 0.1s;
         width: 90vw;
@@ -48,35 +50,67 @@
         text-align: center;
         filter: none;
         z-index: 1;
+        cursor: pointer; /* Indicates clickable */
       }
+
       canvas {
         display: block;
         width: 100%;
       }
+
       .polaroid-text {
         font-family: "Inter", sans-serif;
         font-weight: 100;
         font-size: 24px;
-        color: #333;
         position: absolute;
-        bottom: 20px;
+        top: -40px; /* Position above Polaroid */
         left: 0;
-        right: 0;
         margin: 0;
+        background: linear-gradient(
+          to right,
+          red,
+          orange,
+          yellow,
+          green,
+          blue,
+          indigo,
+          violet
+        );
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
       }
-      input {
-        margin-top: 20px;
-        position: relative;
-        z-index: 1;
+
+      .file-input-container {
+        position: absolute;
+        top: 20px; /* Account for top padding */
+        left: 20px; /* Account for left padding */
+        right: 20px;
+        bottom: 100px; /* Account for bottom padding */
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 2;
+      }
+
+      #imageInput {
+        opacity: 1;
+        cursor: pointer;
+      }
+
+      /* Hide file input when an image is selected */
+      .image-loaded ~ .file-input-container {
+        display: none;
       }
     </style>
   </head>
   <body>
     <div class="polaroid" id="polaroid">
-      <canvas id="canvas"></canvas>
+      <canvas id="canvas" class="image-container"></canvas>
       <div class="polaroid-text">Rainbow</div>
+      <div class="file-input-container">
+        <input type="file" id="imageInput" accept="image/*" />
+      </div>
     </div>
-    <input type="file" id="imageInput" accept="image/*" />
     <script>
       const canvas = document.getElementById("canvas");
       const ctx = canvas.getContext("2d");
@@ -95,6 +129,7 @@
         canvas.width = canvasSize;
         canvas.height = canvasSize; // Square aspect ratio
         if (image.src) drawImage();
+        // noiseTexture = createNoiseTexture(canvas.width, canvas.height); // Update noise texture
       }
       window.addEventListener("resize", resizeCanvas);
       resizeCanvas();
@@ -107,6 +142,7 @@
           reader.onload = (event) => {
             image.src = event.target.result;
             image.onload = () => {
+              canvas.classList.add("image-loaded"); // Mark image as loaded
               drawImage();
               // Set background image via CSS custom property
               document.body.style.setProperty(
@@ -117,6 +153,11 @@
           };
           reader.readAsDataURL(file);
         }
+      });
+
+      // Click Polaroid to change image
+      polaroid.addEventListener("click", () => {
+        imageInput.click();
       });
 
       // Create noise texture for glass-like effect
