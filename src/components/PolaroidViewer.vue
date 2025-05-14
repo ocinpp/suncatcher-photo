@@ -1,38 +1,64 @@
 <template>
   <div class="container">
-    <div class="polaroid" ref="polaroid" @click="triggerFileInput">
-      <div class="image-container">
-        <canvas
-          ref="canvas"
-          class="canvas"
-          :class="{ 'image-loaded': hasImage }"
-        ></canvas>
-      </div>
-      <div class="polaroid-text">Rainbow</div>
-      <div class="file-input-container" v-if="!hasImage">
-        <input
-          type="file"
-          ref="imageInput"
-          accept="image/*"
-          @change="handleImageUpload"
-          class="file-input"
-        />
-      </div>
-      <div class="message-container">
-        <textarea
-          v-model="userMessage"
-          placeholder="Type your message here..."
-          class="message-input"
-          @input="adjustTextareaHeight"
-          ref="messageInput"
-        ></textarea>
+    <div class="polaroid-wrapper">
+      <div class="polaroid" ref="polaroid" @click="triggerFileInput">
+        <div class="image-container">
+          <!-- Skeleton loader that shows while image is loading -->
+          <div class="skeleton-loader" v-if="isLoading"></div>
+          <canvas
+            ref="canvas"
+            class="canvas"
+            :class="{ 'image-loaded': hasImage }"
+          ></canvas>
+        </div>
+        <div class="polaroid-text">Sunshine</div>
+
+        <!-- Custom file input with message and icon -->
+        <div
+          class="file-input-container"
+          :class="{ 'visually-hidden': hasImage }"
+        >
+          <div class="file-input-prompt">
+            <div class="photo-icon">📷</div>
+            <div class="prompt-text">Choose a photo to start</div>
+          </div>
+          <input
+            type="file"
+            ref="imageInput"
+            accept="image/*"
+            @change="handleImageUpload"
+            class="file-input"
+          />
+        </div>
+
+        <div class="message-container">
+          <textarea
+            v-model="userMessage"
+            placeholder="Type your message here..."
+            class="message-input"
+            @input="adjustTextareaHeight"
+            ref="messageInput"
+            @click.stop
+          ></textarea>
+        </div>
       </div>
     </div>
+
+    <!-- Download button always present but disabled when no image -->
+    <button
+      class="download-button"
+      @click.stop="downloadPolaroid"
+      :disabled="hasImage"
+      :class="{ disabled: !hasImage }"
+    >
+      <span class="button-icon">💾</span>
+      Download
+    </button>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from "vue";
+import { ref, onMounted, onUnmounted, watch, nextTick } from "vue";
 
 // Reactive state
 const polaroid = ref(null);
@@ -40,7 +66,9 @@ const canvas = ref(null);
 const imageInput = ref(null);
 const messageInput = ref(null);
 const hasImage = ref(false);
+const isLoading = ref(false);
 const userMessage = ref("");
+const currentImageSrc = ref("");
 
 // Canvas and effect variables
 let ctx = null;
@@ -51,12 +79,20 @@ let tiltX = 0,
   prevTiltX = 0,
   prevTiltY = 0;
 let animationFrameId = null;
+let observer = null;
 
 // Initialize canvas and event listeners
 onMounted(() => {
   ctx = canvas.value.getContext("2d");
+
+  // Set initial dimensions before any content loads
+  setInitialDimensions();
+
+  // Initialize canvas with proper dimensions
   resizeCanvas();
-  window.addEventListener("resize", resizeCanvas);
+
+  // Set up event listeners
+  window.addEventListener("resize", handleResize);
   window.addEventListener("deviceorientation", handleDeviceOrientation);
 
   // Request permission for iOS devices
@@ -70,8 +106,33 @@ onMounted(() => {
       .catch(console.error);
   }
 
-  // Start animation loop
-  updateTilt();
+  // Set initial height for message input to prevent layout shift
+  if (messageInput.value) {
+    messageInput.value.style.height = "var(--message-input-height)";
+  }
+
+  // Use Intersection Observer to only animate when visible
+  observer = new IntersectionObserver(
+    (entries) => {
+      if (entries[0].isIntersecting) {
+        // Start animation loop when visible
+        if (!animationFrameId) {
+          updateTilt();
+        }
+      } else {
+        // Pause animations when not visible
+        if (animationFrameId) {
+          cancelAnimationFrame(animationFrameId);
+          animationFrameId = null;
+        }
+      }
+    },
+    { threshold: 0.1 }
+  );
+
+  if (polaroid.value) {
+    observer.observe(polaroid.value);
+  }
 
   // Fix for first click issue - pre-initialize the file input
   imageInput.value.addEventListener("click", (e) => {
@@ -81,47 +142,120 @@ onMounted(() => {
 
 // Clean up event listeners
 onUnmounted(() => {
-  window.removeEventListener("resize", resizeCanvas);
+  window.removeEventListener("resize", handleResize);
   window.removeEventListener("deviceorientation", handleDeviceOrientation);
-  cancelAnimationFrame(animationFrameId);
+  if (animationFrameId) {
+    cancelAnimationFrame(animationFrameId);
+  }
+  if (observer) {
+    observer.disconnect();
+  }
 });
 
 // Watch for image changes to update the background
-watch(hasImage, (newValue) => {
-  if (newValue && image.src) {
-    document.body.style.setProperty("--bg-image", `url(${image.src})`);
+watch(currentImageSrc, (newSrc) => {
+  if (newSrc) {
+    document.body.style.setProperty("--bg-image", `url(${newSrc})`);
   }
 });
 
 // Functions
-function resizeCanvas() {
-  if (!canvas.value || !polaroid.value) return;
+function handleResize() {
+  setInitialDimensions();
+  resizeCanvas();
+}
 
-  const polaroidWidth = polaroid.value.offsetWidth;
-  const canvasSize = polaroidWidth - 40; // Account for 20px padding on each side
+function setInitialDimensions() {
+  // Calculate and set dimensions based on viewport
+  const viewportWidth = Math.min(window.innerWidth - 40, 500); // 40px for container padding
+  document.documentElement.style.setProperty(
+    "--polaroid-width",
+    `${viewportWidth}px`
+  );
+
+  // Calculate canvas size based on polaroid width
+  const canvasSize = viewportWidth - 2 * 20; // 20px padding on each side
+  document.documentElement.style.setProperty(
+    "--canvas-size",
+    `${canvasSize}px`
+  );
+
+  // Set polaroid height based on aspect ratio
+  const polaroidHeight = viewportWidth * 1.2; // 1.2 aspect ratio
+  document.documentElement.style.setProperty(
+    "--polaroid-height",
+    `${polaroidHeight}px`
+  );
+}
+
+function resizeCanvas() {
+  if (!canvas.value) return;
+
+  // Get computed canvas size from CSS variable
+  const computedStyle = getComputedStyle(document.documentElement);
+  const canvasSize = parseInt(
+    computedStyle.getPropertyValue("--canvas-size"),
+    10
+  );
+
+  // Set canvas dimensions
   canvas.value.width = canvasSize;
   canvas.value.height = canvasSize;
 
-  if (image.src) drawImage();
+  // Redraw if we have an image
+  if (image.src) {
+    drawImage();
+  }
+
+  // Recreate noise texture at new size
   noiseTexture = createNoiseTexture(canvas.value.width, canvas.value.height);
 }
 
-function triggerFileInput() {
+function triggerFileInput(e) {
+  // Prevent default if it's a button click
+  if (e) e.preventDefault();
+
   // Only trigger file input if we're not clicking in the message area
-  if (!hasImage.value || event.target !== messageInput.value) {
-    imageInput.value.click();
-  }
+  if (e && e.target === messageInput.value) return;
+
+  imageInput.value.click();
 }
 
 function handleImageUpload(e) {
   const file = e.target.files[0];
   if (file) {
+    // Show loading state
+    isLoading.value = true;
+
+    // Draw loading placeholder
+    if (ctx && canvas.value) {
+      ctx.fillStyle = "#f0f0f0";
+      ctx.fillRect(0, 0, canvas.value.width, canvas.value.height);
+
+      ctx.fillStyle = "#999";
+      ctx.textAlign = "center";
+      ctx.font = "16px Arial";
+      ctx.fillText(
+        "Loading...",
+        canvas.value.width / 2,
+        canvas.value.height / 2
+      );
+    }
+
     const reader = new FileReader();
     reader.onload = (event) => {
       image = new Image();
       image.onload = () => {
+        // Image loaded successfully
         hasImage.value = true;
+        currentImageSrc.value = image.src; // Update reactive source
+        isLoading.value = false;
         drawImage();
+      };
+      image.onerror = () => {
+        // Handle image load error
+        isLoading.value = false;
+        alert("Failed to load image. Please try another file.");
       };
       image.src = event.target.result;
     };
@@ -268,12 +402,116 @@ function adjustTextareaHeight() {
   messageInput.value.style.height = "auto";
 
   // Set the height to match content (with a max height)
-  const newHeight = Math.min(messageInput.value.scrollHeight, 100);
+  const newHeight = Math.min(
+    Math.max(
+      messageInput.value.scrollHeight,
+      parseInt(
+        getComputedStyle(document.documentElement).getPropertyValue(
+          "--message-input-height"
+        ),
+        10
+      )
+    ),
+    100
+  );
   messageInput.value.style.height = `${newHeight}px`;
+}
+
+// Improved download function to capture the full polaroid with proper text placement
+function downloadPolaroid(e) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  if (!polaroid.value || !hasImage.value) return;
+
+  // Create a temporary canvas to draw the entire polaroid
+  const tempCanvas = document.createElement("canvas");
+  const polaroidRect = polaroid.value.getBoundingClientRect();
+
+  // Set canvas size to match polaroid dimensions
+  tempCanvas.width = polaroidRect.width;
+  tempCanvas.height = polaroidRect.height;
+
+  const tempCtx = tempCanvas.getContext("2d");
+
+  // Draw white background for the entire polaroid
+  tempCtx.fillStyle = "white";
+  tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+  // Get the position of the canvas within the polaroid
+  const canvasRect = canvas.value.getBoundingClientRect();
+  const canvasOffsetX = canvasRect.left - polaroidRect.left;
+  const canvasOffsetY = canvasRect.top - polaroidRect.top;
+
+  // Draw the image canvas at the correct position
+  tempCtx.drawImage(
+    canvas.value,
+    canvasOffsetX,
+    canvasOffsetY,
+    canvasRect.width,
+    canvasRect.height
+  );
+
+  // Add the message text at the bottom of the polaroid
+  if (userMessage.value) {
+    tempCtx.font = "16px Inter, sans-serif";
+    tempCtx.fillStyle = "black";
+    tempCtx.textAlign = "center";
+
+    // Position text in the bottom white area
+    const textY = canvasOffsetY + canvasRect.height + 40;
+
+    // Handle text wrapping for long messages
+    const maxWidth = tempCanvas.width - 40;
+    const words = userMessage.value.split(" ");
+    let line = "";
+    let y = textY;
+
+    for (let i = 0; i < words.length; i++) {
+      const testLine = line + words[i] + " ";
+      const metrics = tempCtx.measureText(testLine);
+
+      if (metrics.width > maxWidth && i > 0) {
+        tempCtx.fillText(line, tempCanvas.width / 2, y);
+        line = words[i] + " ";
+        y += 20;
+      } else {
+        line = testLine;
+      }
+    }
+
+    tempCtx.fillText(line, tempCanvas.width / 2, y);
+  }
+
+  // Convert to data URL and trigger download
+  try {
+    const dataUrl = tempCanvas.toDataURL("image/png");
+    const link = document.createElement("a");
+    link.download = "my-polaroid.png";
+    link.href = dataUrl;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } catch (err) {
+    console.error("Error creating download:", err);
+    alert("Could not download the image. Please try again.");
+  }
 }
 </script>
 
 <style>
+:root {
+  /* CSS Variables for consistent sizing */
+  --polaroid-width: 500px;
+  --polaroid-height: 600px;
+  --polaroid-padding: 20px;
+  --canvas-size: calc(var(--polaroid-width) - (var(--polaroid-padding) * 2));
+  --message-input-height: 40px;
+  --download-button-height: 44px;
+  --download-button-width: 180px;
+  --bg-image: none;
+}
+
 body {
   display: flex;
   flex-direction: column;
@@ -284,7 +522,7 @@ body {
   background-color: #f0f0f0;
   font-family: Arial, sans-serif;
   position: relative;
-  --bg-image: none; /* Default background image */
+  overflow-x: hidden;
 }
 
 /* Pseudo-element for grayscale background */
@@ -302,49 +540,91 @@ body::before {
   filter: grayscale(100%);
   z-index: -1;
   transition: background-image 0.3s;
+  will-change: background-image;
 }
 
 .container {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
   align-items: center;
+  justify-content: center;
   width: 95vw;
+  max-width: 95vw;
+  /* padding: 20px; */
   box-sizing: border-box;
+  gap: 20px;
+}
+
+.polaroid-wrapper {
+  display: flex;
+  justify-content: center;
+  width: 100%;
 }
 
 .polaroid {
   background: white;
-  padding: 20px 20px 80px 20px; /* Extra bottom padding for Polaroid effect */
+  padding: var(--polaroid-padding) var(--polaroid-padding) 80px
+    var(--polaroid-padding);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-  transition: transform 0.1s;
-  width: 90vw;
-  max-width: 500px;
+  width: var(--polaroid-width);
+  max-width: 100%;
   position: relative;
   text-align: center;
   filter: none;
   z-index: 1;
-  cursor: pointer; /* Indicates clickable */
+  cursor: pointer;
+  will-change: transform;
+  contain: layout style;
+  box-sizing: border-box;
+  margin: 0 auto;
 }
 
 .image-container {
   width: 100%;
+  aspect-ratio: 1 / 1;
   position: relative;
+  margin: 0 auto;
+  contain: layout size style;
 }
 
 .canvas {
   display: block;
   width: 100%;
+  height: 100%;
+  contain: strict;
+}
+
+/* Skeleton loader */
+.skeleton-loader {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+  z-index: 2;
+}
+
+@keyframes loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .polaroid-text {
   font-family: "Inter", sans-serif;
   font-weight: 200;
-  font-size: 40px;
+  font-size: 38px;
   position: absolute;
   top: -48px; /* Position above Polaroid */
   left: 0;
+  width: 100%;
   margin: 0;
-  text-transform: uppercase;
   background: linear-gradient(
     to right,
     red,
@@ -359,50 +639,138 @@ body::before {
   -webkit-text-fill-color: transparent;
   background-clip: text;
   color: transparent;
+  contain: content;
+  text-align: left;
 }
 
 .file-input-container {
   position: absolute;
-  top: 20px; /* Account for top padding */
-  left: 20px; /* Account for left padding */
-  right: 20px;
-  bottom: 100px; /* Account for bottom padding */
+  top: var(--polaroid-padding);
+  left: var(--polaroid-padding);
+  right: var(--polaroid-padding);
+  bottom: 100px;
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 2;
+  contain: layout style;
 }
 
 .file-input {
-  opacity: 1;
+  opacity: 0;
+  position: absolute;
+  width: 100%;
+  height: 100%;
   cursor: pointer;
+}
+
+.file-input-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(245, 245, 245, 0.7);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+  contain: content;
+}
+
+.file-input-prompt:hover {
+  background-color: rgba(245, 245, 245, 0.9);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.photo-icon {
+  font-size: 40px;
+  margin-bottom: 10px;
+}
+
+.prompt-text {
+  font-size: 18px;
+  color: #555;
+}
+
+.visually-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
 }
 
 .message-container {
   position: absolute;
   bottom: 10px;
-  left: 20px;
-  right: 20px;
+  left: var(--polaroid-padding);
+  right: var(--polaroid-padding);
   padding: 5px;
   z-index: 3;
+  height: 60px; /* Fixed height to prevent layout shift */
+  contain: layout size style;
 }
 
 .message-input {
   width: 100%;
-  min-height: 40px;
+  height: var(--message-input-height);
+  min-height: var(--message-input-height);
   max-height: 100px;
+  padding: 8px;
   border: none;
   background: transparent;
   font-family: "Inter", sans-serif;
   font-size: 20px;
-  font-weight: 200;
+  font-weight: 100;
+  line-height: 1.5;
   resize: none;
   outline: none;
-  text-align: left;
+  text-align: center;
   overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .message-input::placeholder {
   color: #aaa;
+}
+
+/* Download button below the polaroid */
+.download-button {
+  background-color: #f0f8ff;
+  border: 1px solid #ddd;
+  border-radius: 25px;
+  padding: 10px 20px;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-top: 10px;
+  height: var(--download-button-height);
+  min-width: var(--download-button-width);
+  contain: layout size style;
+}
+
+.download-button:hover:not(.disabled) {
+  background-color: #e6f2ff;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
+}
+
+.download-button.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #f5f5f5;
+}
+
+.button-icon {
+  margin-right: 8px;
+  font-size: 18px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+  :root {
+    --polaroid-width: calc(100vw - 40px);
+  }
 }
 </style>
