@@ -48,7 +48,7 @@
     <button
       class="download-button"
       @click.stop="downloadPolaroid"
-      :disabled="hasImage"
+      :disabled="!hasImage"
       :class="{ disabled: !hasImage }"
     >
       <span class="button-icon">💾</span>
@@ -69,6 +69,7 @@ const hasImage = ref(false);
 const isLoading = ref(false);
 const userMessage = ref("");
 const currentImageSrc = ref("");
+let backgroundCanvas = null;
 
 // Canvas and effect variables
 let ctx = null;
@@ -80,6 +81,10 @@ let tiltX = 0,
   prevTiltY = 0;
 let animationFrameId = null;
 let observer = null;
+let bgElement = null;
+
+// Constants
+const MAX_BACKGROUND_SIZE = 1200; // Maximum size for background image
 
 // Initialize canvas and event listeners
 onMounted(() => {
@@ -138,6 +143,23 @@ onMounted(() => {
   imageInput.value.addEventListener("click", (e) => {
     e.stopPropagation();
   });
+
+  // Create background element for mobile compatibility
+  bgElement = document.createElement("div");
+  bgElement.id = "bg-fallback";
+  bgElement.className = "background-fallback";
+  document.body.appendChild(bgElement);
+
+  // Create a background canvas for resizing large images
+  backgroundCanvas = document.createElement("canvas");
+
+  // Apply background image when it changes
+  watch(currentImageSrc, (newSrc) => {
+    if (newSrc) {
+      // Create a resized version of the image for the background
+      createResizedBackground(newSrc);
+    }
+  });
 });
 
 // Clean up event listeners
@@ -150,12 +172,10 @@ onUnmounted(() => {
   if (observer) {
     observer.disconnect();
   }
-});
 
-// Watch for image changes to update the background
-watch(currentImageSrc, (newSrc) => {
-  if (newSrc) {
-    document.body.style.setProperty("--bg-image", `url(${newSrc})`);
+  // Remove fallback background if it exists
+  if (bgElement && bgElement.parentNode) {
+    bgElement.parentNode.removeChild(bgElement);
   }
 });
 
@@ -261,6 +281,75 @@ function handleImageUpload(e) {
     };
     reader.readAsDataURL(file);
   }
+}
+
+// Function to create a resized version of the image for background
+function createResizedBackground(imageSrc) {
+  const bgImage = new Image();
+
+  bgImage.onload = () => {
+    try {
+      // Calculate new dimensions while maintaining aspect ratio
+      let newWidth, newHeight;
+
+      if (bgImage.width > bgImage.height) {
+        newWidth = Math.min(bgImage.width, MAX_BACKGROUND_SIZE);
+        newHeight = (bgImage.height / bgImage.width) * newWidth;
+      } else {
+        newHeight = Math.min(bgImage.height, MAX_BACKGROUND_SIZE);
+        newWidth = (bgImage.width / bgImage.height) * newHeight;
+      }
+
+      // Set canvas dimensions
+      backgroundCanvas.width = newWidth;
+      backgroundCanvas.height = newHeight;
+
+      // Draw resized image to canvas
+      const bgCtx = backgroundCanvas.getContext("2d");
+      bgCtx.drawImage(bgImage, 0, 0, newWidth, newHeight);
+
+      // Get data URL of resized image
+      const resizedImageUrl = backgroundCanvas.toDataURL("image/jpeg", 0.7); // Use JPEG with 70% quality for smaller size
+
+      // Detect if we're on a mobile device
+      const isMobile =
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+          navigator.userAgent
+        );
+
+      if (isMobile) {
+        // Use the fallback element for mobile
+        bgElement.style.backgroundImage = `url(${resizedImageUrl})`;
+        // Clear the CSS variable to avoid duplicate backgrounds
+        document.body.style.setProperty("--bg-image", "none");
+      } else {
+        // Use the CSS variable for desktop
+        document.body.style.setProperty(
+          "--bg-image",
+          `url(${resizedImageUrl})`
+        );
+        // Clear the fallback background
+        bgElement.style.backgroundImage = "none";
+      }
+    } catch (error) {
+      console.error("Error creating background:", error);
+      // Fallback to solid color background if there's an error
+      document.body.style.setProperty("--bg-image", "none");
+      bgElement.style.backgroundImage = "none";
+      document.body.style.backgroundColor = "#f0f0f0";
+    }
+  };
+
+  bgImage.onerror = () => {
+    console.error("Error loading background image");
+    // Fallback to solid color background
+    document.body.style.setProperty("--bg-image", "none");
+    bgElement.style.backgroundImage = "none";
+    document.body.style.backgroundColor = "#f0f0f0";
+  };
+
+  // Load the image
+  bgImage.src = imageSrc;
 }
 
 function handleDeviceOrientation(e) {
@@ -520,7 +609,6 @@ body {
   min-height: 100vh;
   margin: 0;
   background-color: #f0f0f0;
-  font-family: Arial, sans-serif;
   position: relative;
   overflow-x: hidden;
 }
@@ -543,16 +631,34 @@ body::before {
   will-change: background-image;
 }
 
+/* Fallback background for mobile compatibility */
+.background-fallback {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: grayscale(100%);
+  z-index: -1; /* Same z-index as body::before */
+  transition: background-image 0.3s;
+  pointer-events: none;
+}
+
 .container {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 95vw;
-  max-width: 95vw;
-  /* padding: 20px; */
+  width: 100%;
+  max-width: 100%;
+  padding: 20px;
   box-sizing: border-box;
   gap: 20px;
+  position: relative;
+  z-index: 1;
 }
 
 .polaroid-wrapper {
@@ -619,9 +725,11 @@ body::before {
 .polaroid-text {
   font-family: "Inter", sans-serif;
   font-weight: 200;
-  font-size: 38px;
+  font-size: 32px;
+  text-align: left;
+  text-transform: uppercase;
   position: absolute;
-  top: -48px; /* Position above Polaroid */
+  top: -42px; /* Position above Polaroid */
   left: 0;
   width: 100%;
   margin: 0;
@@ -640,7 +748,6 @@ body::before {
   background-clip: text;
   color: transparent;
   contain: content;
-  text-align: left;
 }
 
 .file-input-container {
@@ -703,7 +810,6 @@ body::before {
   bottom: 10px;
   left: var(--polaroid-padding);
   right: var(--polaroid-padding);
-  padding: 5px;
   z-index: 3;
   height: 60px; /* Fixed height to prevent layout shift */
   contain: layout size style;
@@ -714,16 +820,14 @@ body::before {
   height: var(--message-input-height);
   min-height: var(--message-input-height);
   max-height: 100px;
-  padding: 8px;
   border: none;
   background: transparent;
   font-family: "Inter", sans-serif;
   font-size: 20px;
-  font-weight: 100;
   line-height: 1.5;
   resize: none;
   outline: none;
-  text-align: center;
+  text-align: left;
   overflow-y: auto;
   box-sizing: border-box;
 }
