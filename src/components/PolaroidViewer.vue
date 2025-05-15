@@ -627,7 +627,7 @@ body::before {
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  filter: grayscale(100%);
+  filter: grayscale(100%) blur(0.5rem);
   z-index: -1;
   transition: background-image 0.3s;
   will-change: background-image;
@@ -730,6 +730,7 @@ body::before {
   font-size: 1.8rem;
   text-align: left;
   text-transform: uppercase;
+  letter-spacing: -0.3px;
   position: absolute;
   top: -42px; /* Position above Polaroid */
   left: 0;
@@ -798,6 +799,7 @@ body::before {
 
 .prompt-text {
   font-size: 1.2rem;
+  letter-spacing: -0.3px;
   color: #555;
 }
 
@@ -809,7 +811,7 @@ body::before {
 
 .message-container {
   position: absolute;
-  bottom: 10px;
+  bottom: 0px;
   left: var(--polaroid-padding);
   right: var(--polaroid-padding);
   z-index: 3;
@@ -826,6 +828,7 @@ body::before {
   background: transparent;
   font-family: "Inter", sans-serif;
   font-size: 1.2rem;
+  letter-spacing: -0.3px;
   line-height: 1.5;
   resize: none;
   outline: none;
@@ -845,6 +848,7 @@ body::before {
   border-radius: 25px;
   padding: 10px 20px;
   font-size: 1.2rem;
+  letter-spacing: -0.3px;
   display: flex;
   align-items: center;
   justify-content: center;
