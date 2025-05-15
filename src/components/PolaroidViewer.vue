@@ -254,7 +254,7 @@ function handleImageUpload(e) {
 
       ctx.fillStyle = "#999";
       ctx.textAlign = "center";
-      ctx.font = "16px Arial";
+      ctx.font = ".12rem Inter, sans-serif";
       ctx.fillText(
         "Loading...",
         canvas.value.width / 2,
@@ -543,16 +543,18 @@ function downloadPolaroid(e) {
 
   // Add the message text at the bottom of the polaroid
   if (userMessage.value) {
-    tempCtx.font = "16px Inter, sans-serif";
+    tempCtx.font = "200 1.2rem Inter, sans-serif";
     tempCtx.fillStyle = "black";
-    tempCtx.textAlign = "center";
+    tempCtx.textAlign = "left";
 
     // Position text in the bottom white area
+    const textX = canvasOffsetX;
     const textY = canvasOffsetY + canvasRect.height + 40;
 
     // Handle text wrapping for long messages
     const maxWidth = tempCanvas.width - 40;
     const words = userMessage.value.split(" ");
+
     let line = "";
     let y = textY;
 
@@ -561,7 +563,7 @@ function downloadPolaroid(e) {
       const metrics = tempCtx.measureText(testLine);
 
       if (metrics.width > maxWidth && i > 0) {
-        tempCtx.fillText(line, tempCanvas.width / 2, y);
+        tempCtx.fillText(line, textX, y);
         line = words[i] + " ";
         y += 20;
       } else {
@@ -569,7 +571,7 @@ function downloadPolaroid(e) {
       }
     }
 
-    tempCtx.fillText(line, tempCanvas.width / 2, y);
+    tempCtx.fillText(line, textX, y);
   }
 
   // Convert to data URL and trigger download
@@ -725,7 +727,7 @@ body::before {
 .polaroid-text {
   font-family: "Inter", sans-serif;
   font-weight: 200;
-  font-size: 32px;
+  font-size: 1.8rem;
   text-align: left;
   text-transform: uppercase;
   position: absolute;
@@ -790,12 +792,12 @@ body::before {
 }
 
 .photo-icon {
-  font-size: 40px;
+  font-size: 2rem;
   margin-bottom: 10px;
 }
 
 .prompt-text {
-  font-size: 18px;
+  font-size: 1.2rem;
   color: #555;
 }
 
@@ -823,7 +825,7 @@ body::before {
   border: none;
   background: transparent;
   font-family: "Inter", sans-serif;
-  font-size: 20px;
+  font-size: 1.2rem;
   line-height: 1.5;
   resize: none;
   outline: none;
@@ -842,7 +844,7 @@ body::before {
   border: 1px solid #ddd;
   border-radius: 25px;
   padding: 10px 20px;
-  font-size: 16px;
+  font-size: 1.2rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -868,7 +870,7 @@ body::before {
 
 .button-icon {
   margin-right: 8px;
-  font-size: 18px;
+  font-size: 1.2rem;
 }
 
 /* Responsive adjustments */
