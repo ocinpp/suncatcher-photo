@@ -631,6 +631,7 @@ body::before {
   z-index: -1;
   transition: background-image 0.3s;
   will-change: background-image;
+  transform: scale(1.1);
 }
 
 /* Fallback background for mobile compatibility */
@@ -647,6 +648,7 @@ body::before {
   z-index: -1; /* Same z-index as body::before */
   transition: background-image 0.3s;
   pointer-events: none;
+  transform: scale(1.1);
 }
 
 .container {
