@@ -608,7 +608,7 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
+  height: 100dvh;
   margin: 0;
   background-color: #f0f0f0;
   position: relative;
