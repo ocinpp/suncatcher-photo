@@ -44,6 +44,16 @@
       </div>
     </div>
 
+    <!-- Permission button for device orientation -->
+    <button
+      v-if="!orientationPermissionGranted && needsPermissionRequest"
+      class="permission-button"
+      @click="requestOrientationPermission"
+    >
+      <span class="button-icon">🔄</span>
+      Enable Effects
+    </button>
+
     <!-- Download button always present but disabled when no image -->
     <button
       class="download-button"
@@ -55,6 +65,12 @@
       Download
     </button>
   </div>
+
+  <!-- Add this to ensure the Inter font is loaded -->
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@100;400&display=swap"
+    rel="stylesheet"
+  />
 </template>
 
 <script setup>
@@ -69,6 +85,8 @@ const hasImage = ref(false);
 const isLoading = ref(false);
 const userMessage = ref("");
 const currentImageSrc = ref("");
+const orientationPermissionGranted = ref(false);
+const needsPermissionRequest = ref(false);
 let backgroundCanvas = null;
 
 // Canvas and effect variables
@@ -85,6 +103,7 @@ let bgElement = null;
 
 // Constants
 const MAX_BACKGROUND_SIZE = 1200; // Maximum size for background image
+const FIXED_DOWNLOAD_WIDTH = 500; // Fixed width for downloaded images
 
 // Initialize canvas and event listeners
 onMounted(() => {
@@ -100,15 +119,12 @@ onMounted(() => {
   window.addEventListener("resize", handleResize);
   window.addEventListener("deviceorientation", handleDeviceOrientation);
 
-  // Request permission for iOS devices
+  // Check if device orientation permission is needed
   if (typeof DeviceOrientationEvent.requestPermission === "function") {
-    DeviceOrientationEvent.requestPermission()
-      .then((permissionState) => {
-        if (permissionState === "granted") {
-          console.log("Device orientation permission granted");
-        }
-      })
-      .catch(console.error);
+    needsPermissionRequest.value = true;
+  } else {
+    // No permission needed for this device/browser
+    orientationPermissionGranted.value = true;
   }
 
   // Set initial height for message input to prevent layout shift
@@ -178,6 +194,25 @@ onUnmounted(() => {
     bgElement.parentNode.removeChild(bgElement);
   }
 });
+
+// Request device orientation permission
+function requestOrientationPermission() {
+  if (typeof DeviceOrientationEvent.requestPermission === "function") {
+    DeviceOrientationEvent.requestPermission()
+      .then((permissionState) => {
+        if (permissionState === "granted") {
+          console.log("Device orientation permission granted");
+          orientationPermissionGranted.value = true;
+        } else {
+          console.log("Device orientation permission denied");
+        }
+      })
+      .catch(console.error);
+  } else {
+    // No permission needed for this device/browser
+    orientationPermissionGranted.value = true;
+  }
+}
 
 // Functions
 function handleResize() {
@@ -469,11 +504,7 @@ function applySunCatcherEffect() {
 }
 
 function updateTilt() {
-  if (polaroid.value) {
-    polaroid.value.style.transform = `perspective(1000px) rotateX(${
-      tiltY * 10
-    }deg) rotateY(${tiltX * 10}deg)`;
-  }
+  // Removed polaroid tilting as requested
 
   if (hasImage.value && image.src) {
     drawImage();
@@ -506,22 +537,29 @@ function adjustTextareaHeight() {
   messageInput.value.style.height = `${newHeight}px`;
 }
 
-// Improved download function to capture the full polaroid with proper text placement
+// Improved download function with fixed width of 500px
 function downloadPolaroid(e) {
   e.preventDefault();
   e.stopPropagation();
 
   if (!polaroid.value || !hasImage.value) return;
 
-  // Create a temporary canvas to draw the entire polaroid
+  // Create a temporary canvas with fixed width of 500px
   const tempCanvas = document.createElement("canvas");
-  const polaroidRect = polaroid.value.getBoundingClientRect();
+  const fixedWidth = FIXED_DOWNLOAD_WIDTH;
 
-  // Set canvas size to match polaroid dimensions
-  tempCanvas.width = polaroidRect.width;
-  tempCanvas.height = polaroidRect.height;
+  // Get the current polaroid dimensions for scaling
+  const polaroidRect = polaroid.value.getBoundingClientRect();
+  const aspectRatio = polaroidRect.height / polaroidRect.width;
+
+  // Set canvas dimensions with fixed width
+  tempCanvas.width = fixedWidth;
+  tempCanvas.height = fixedWidth * aspectRatio;
 
   const tempCtx = tempCanvas.getContext("2d");
+
+  // Scale factor for drawing elements
+  const scaleFactor = fixedWidth / polaroidRect.width;
 
   // Draw white background for the entire polaroid
   tempCtx.fillStyle = "white";
@@ -529,30 +567,34 @@ function downloadPolaroid(e) {
 
   // Get the position of the canvas within the polaroid
   const canvasRect = canvas.value.getBoundingClientRect();
-  const canvasOffsetX = canvasRect.left - polaroidRect.left;
-  const canvasOffsetY = canvasRect.top - polaroidRect.top;
+  const canvasOffsetX = (canvasRect.left - polaroidRect.left) * scaleFactor;
+  const canvasOffsetY = (canvasRect.top - polaroidRect.top) * scaleFactor;
+  const canvasWidth = canvasRect.width * scaleFactor;
+  const canvasHeight = canvasRect.height * scaleFactor;
 
-  // Draw the image canvas at the correct position
+  // Draw the image canvas at the correct position and scaled size
   tempCtx.drawImage(
     canvas.value,
     canvasOffsetX,
     canvasOffsetY,
-    canvasRect.width,
-    canvasRect.height
+    canvasWidth,
+    canvasHeight
   );
 
   // Add the message text at the bottom of the polaroid
   if (userMessage.value) {
-    tempCtx.font = "200 1.2rem Inter, sans-serif";
+    // Scale font size based on the scale factor
+    const fontSize = 1.2 * scaleFactor;
+    tempCtx.font = `200 ${fontSize}rem Inter, sans-serif`;
     tempCtx.fillStyle = "black";
     tempCtx.textAlign = "left";
 
     // Position text in the bottom white area
     const textX = canvasOffsetX;
-    const textY = canvasOffsetY + canvasRect.height + 40;
+    const textY = canvasOffsetY + canvasHeight + 40 * scaleFactor;
 
     // Handle text wrapping for long messages
-    const maxWidth = tempCanvas.width - 40;
+    const maxWidth = tempCanvas.width - 40 * scaleFactor;
     const words = userMessage.value.split(" ");
 
     let line = "";
@@ -565,7 +607,7 @@ function downloadPolaroid(e) {
       if (metrics.width > maxWidth && i > 0) {
         tempCtx.fillText(line, textX, y);
         line = words[i] + " ";
-        y += 20;
+        y += 20 * scaleFactor;
       } else {
         line = testLine;
       }
@@ -576,13 +618,16 @@ function downloadPolaroid(e) {
 
   // Convert to data URL and trigger download
   try {
-    const dataUrl = tempCanvas.toDataURL("image/png");
-    const link = document.createElement("a");
-    link.download = "my-polaroid.png";
-    link.href = dataUrl;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Ensure the Inter font is loaded before generating the image
+    document.fonts.ready.then(() => {
+      const dataUrl = tempCanvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.download = "my-polaroid.png";
+      link.href = dataUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
   } catch (err) {
     console.error("Error creating download:", err);
     alert("Could not download the image. Please try again.");
@@ -683,7 +728,6 @@ body::before {
   filter: none;
   z-index: 1;
   cursor: pointer;
-  will-change: transform;
   contain: layout style;
   box-sizing: border-box;
   margin: 0 auto;
@@ -843,13 +887,38 @@ body::before {
   color: #aaa;
 }
 
+/* Permission button */
+.permission-button {
+  background-color: #ffe0e0;
+  border: 1px solid #ffcccc;
+  border-radius: 25px;
+  padding: 10px 20px;
+  font-size: 1rem;
+  letter-spacing: -0.3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-top: 10px;
+  height: var(--download-button-height);
+  min-width: var(--download-button-width);
+  contain: layout size style;
+}
+
+.permission-button:hover {
+  background-color: #ffd0d0;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
+}
+
 /* Download button below the polaroid */
 .download-button {
   background-color: #f0f8ff;
   border: 1px solid #ddd;
   border-radius: 25px;
   padding: 10px 20px;
-  font-size: 1.2rem;
+  font-size: 1rem;
   letter-spacing: -0.3px;
   display: flex;
   align-items: center;
@@ -876,7 +945,7 @@ body::before {
 
 .button-icon {
   margin-right: 8px;
-  font-size: 1.2rem;
+  font-size: 1rem;
 }
 
 /* Responsive adjustments */
