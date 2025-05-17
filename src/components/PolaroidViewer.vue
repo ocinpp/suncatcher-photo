@@ -44,16 +44,6 @@
       </div>
     </div>
 
-    <!-- Permission button for device orientation -->
-    <button
-      v-if="!orientationPermissionGranted && needsPermissionRequest"
-      class="permission-button"
-      @click="requestOrientationPermission"
-    >
-      <span class="button-icon">🔄</span>
-      Enable Effects
-    </button>
-
     <!-- Download button always present but disabled when no image -->
     <button
       class="download-button"
@@ -63,6 +53,16 @@
     >
       <span class="button-icon">💾</span>
       Download
+    </button>
+
+    <!-- Permission button for device orientation - positioned at bottom right -->
+    <button
+      v-if="!orientationPermissionGranted && needsPermissionRequest"
+      class="permission-button"
+      @click="requestOrientationPermission"
+    >
+      <span class="button-icon">✨</span>
+      Enable Effects
     </button>
   </div>
 
@@ -104,6 +104,8 @@ let bgElement = null;
 // Constants
 const MAX_BACKGROUND_SIZE = 1200; // Maximum size for background image
 const FIXED_DOWNLOAD_WIDTH = 500; // Fixed width for downloaded images
+const MIN_POLAROID_WIDTH = 320; // Minimum width for polaroid
+const REFERENCE_WIDTH = 500; // Reference width for scaling
 
 // Initialize canvas and event listeners
 onMounted(() => {
@@ -221,15 +223,23 @@ function handleResize() {
 }
 
 function setInitialDimensions() {
-  // Calculate and set dimensions based on viewport
-  const viewportWidth = Math.min(window.innerWidth - 40, 500); // 40px for container padding
+  // Calculate and set dimensions based on viewport with minimum width
+  const viewportWidth = Math.max(
+    Math.min(window.innerWidth - 40, REFERENCE_WIDTH),
+    MIN_POLAROID_WIDTH
+  );
   document.documentElement.style.setProperty(
     "--polaroid-width",
     `${viewportWidth}px`
   );
 
+  // Calculate the scale ratio compared to reference width
+  const scaleRatio = viewportWidth / REFERENCE_WIDTH;
+  document.documentElement.style.setProperty("--scale-ratio", scaleRatio);
+
   // Calculate canvas size based on polaroid width
-  const canvasSize = viewportWidth - 2 * 20; // 20px padding on each side
+  // Use the same proportions as when width is 500px
+  const canvasSize = viewportWidth - 2 * (20 * scaleRatio); // 20px padding on each side at reference width
   document.documentElement.style.setProperty(
     "--canvas-size",
     `${canvasSize}px`
@@ -240,6 +250,20 @@ function setInitialDimensions() {
   document.documentElement.style.setProperty(
     "--polaroid-height",
     `${polaroidHeight}px`
+  );
+
+  // Set border size based on reference width
+  const borderSize = 20 * scaleRatio;
+  document.documentElement.style.setProperty(
+    "--polaroid-padding",
+    `${borderSize}px`
+  );
+
+  // Set bottom padding based on reference width
+  const bottomPadding = 80 * scaleRatio;
+  document.documentElement.style.setProperty(
+    "--polaroid-bottom-padding",
+    `${bottomPadding}px`
   );
 }
 
@@ -548,9 +572,8 @@ function downloadPolaroid(e) {
   const tempCanvas = document.createElement("canvas");
   const fixedWidth = FIXED_DOWNLOAD_WIDTH;
 
-  // Get the current polaroid dimensions for scaling
-  const polaroidRect = polaroid.value.getBoundingClientRect();
-  const aspectRatio = polaroidRect.height / polaroidRect.width;
+  // Calculate the aspect ratio based on the reference design
+  const aspectRatio = 1.2; // Height is 1.2x the width for a polaroid
 
   // Set canvas dimensions with fixed width
   tempCanvas.width = fixedWidth;
@@ -558,47 +581,46 @@ function downloadPolaroid(e) {
 
   const tempCtx = tempCanvas.getContext("2d");
 
-  // Scale factor for drawing elements
-  const scaleFactor = fixedWidth / polaroidRect.width;
-
   // Draw white background for the entire polaroid
   tempCtx.fillStyle = "white";
   tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
 
-  // Get the position of the canvas within the polaroid
-  const canvasRect = canvas.value.getBoundingClientRect();
-  const canvasOffsetX = (canvasRect.left - polaroidRect.left) * scaleFactor;
-  const canvasOffsetY = (canvasRect.top - polaroidRect.top) * scaleFactor;
-  const canvasWidth = canvasRect.width * scaleFactor;
-  const canvasHeight = canvasRect.height * scaleFactor;
+  // Calculate the reference proportions
+  const paddingRatio = 20 / REFERENCE_WIDTH; // 20px padding at 500px width
+  const bottomPaddingRatio = 80 / REFERENCE_WIDTH; // 80px bottom padding at 500px width
 
-  // Draw the image canvas at the correct position and scaled size
-  tempCtx.drawImage(
-    canvas.value,
-    canvasOffsetX,
-    canvasOffsetY,
-    canvasWidth,
-    canvasHeight
-  );
+  // Calculate actual padding sizes for the fixed width
+  const padding = fixedWidth * paddingRatio;
+  const bottomPadding = fixedWidth * bottomPaddingRatio;
+
+  // Calculate image area dimensions
+  const imageWidth = fixedWidth - padding * 2;
+  const imageHeight = imageWidth; // Square image
+
+  // Draw the image from the canvas
+  tempCtx.drawImage(canvas.value, padding, padding, imageWidth, imageHeight);
 
   // Add the message text at the bottom of the polaroid
   if (userMessage.value) {
-    // Scale font size based on the scale factor
-    const fontSize = 1.2 * scaleFactor;
-    tempCtx.font = `200 ${fontSize}rem Inter, sans-serif`;
+    // Use consistent font size based on reference width
+    const fontSizeRatio = (1.2 / REFERENCE_WIDTH) * 16; // 1.2rem at 500px width
+    const fontSize = fixedWidth * fontSizeRatio;
+
+    tempCtx.font = `200 ${fontSize}px Inter, sans-serif`;
     tempCtx.fillStyle = "black";
     tempCtx.textAlign = "left";
 
     // Position text in the bottom white area
-    const textX = canvasOffsetX;
-    const textY = canvasOffsetY + canvasHeight + 40 * scaleFactor;
+    const textX = padding;
+    const textY = padding + imageHeight + padding * 1.5;
 
     // Handle text wrapping for long messages
-    const maxWidth = tempCanvas.width - 40 * scaleFactor;
+    const maxWidth = tempCanvas.width - padding * 2;
     const words = userMessage.value.split(" ");
 
     let line = "";
     let y = textY;
+    const lineHeight = fontSize * 1.2;
 
     for (let i = 0; i < words.length; i++) {
       const testLine = line + words[i] + " ";
@@ -607,7 +629,7 @@ function downloadPolaroid(e) {
       if (metrics.width > maxWidth && i > 0) {
         tempCtx.fillText(line, textX, y);
         line = words[i] + " ";
-        y += 20 * scaleFactor;
+        y += lineHeight;
       } else {
         line = testLine;
       }
@@ -641,11 +663,13 @@ function downloadPolaroid(e) {
   --polaroid-width: 500px;
   --polaroid-height: 600px;
   --polaroid-padding: 20px;
+  --polaroid-bottom-padding: 80px;
   --canvas-size: calc(var(--polaroid-width) - (var(--polaroid-padding) * 2));
   --message-input-height: 40px;
   --download-button-height: 44px;
   --download-button-width: 180px;
   --bg-image: none;
+  --scale-ratio: 1;
 }
 
 body {
@@ -718,10 +742,11 @@ body::before {
 
 .polaroid {
   background: white;
-  padding: var(--polaroid-padding) var(--polaroid-padding) 80px
-    var(--polaroid-padding);
+  padding: var(--polaroid-padding) var(--polaroid-padding)
+    var(--polaroid-bottom-padding) var(--polaroid-padding);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
   width: var(--polaroid-width);
+  min-width: 320px;
   max-width: 100%;
   position: relative;
   text-align: center;
@@ -773,12 +798,12 @@ body::before {
 .polaroid-text {
   font-family: "Inter", sans-serif;
   font-weight: 200;
-  font-size: 1.8rem;
+  font-size: clamp(1.2rem, calc(1.8rem * var(--scale-ratio)), 1.8rem);
   text-align: left;
   text-transform: uppercase;
   letter-spacing: -0.3px;
   position: absolute;
-  top: -42px; /* Position above Polaroid */
+  top: calc(-42px * var(--scale-ratio)); /* Position above Polaroid */
   left: 0;
   width: 100%;
   margin: 0;
@@ -804,7 +829,7 @@ body::before {
   top: var(--polaroid-padding);
   left: var(--polaroid-padding);
   right: var(--polaroid-padding);
-  bottom: 100px;
+  bottom: var(--polaroid-bottom-padding);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -839,12 +864,12 @@ body::before {
 }
 
 .photo-icon {
-  font-size: 2rem;
+  font-size: clamp(1.5rem, calc(2rem * var(--scale-ratio)), 2.5rem);
   margin-bottom: 10px;
 }
 
 .prompt-text {
-  font-size: 1.2rem;
+  font-size: clamp(0.9rem, calc(1.2rem * var(--scale-ratio)), 1.4rem);
   letter-spacing: -0.3px;
   color: #555;
 }
@@ -861,7 +886,9 @@ body::before {
   left: var(--polaroid-padding);
   right: var(--polaroid-padding);
   z-index: 3;
-  height: 60px; /* Fixed height to prevent layout shift */
+  height: calc(
+    var(--polaroid-bottom-padding) - 20px
+  ); /* Fixed height to prevent layout shift */
   contain: layout size style;
 }
 
@@ -873,7 +900,7 @@ body::before {
   border: none;
   background: transparent;
   font-family: "Inter", sans-serif;
-  font-size: 1.2rem;
+  font-size: clamp(0.9rem, calc(1.2rem * var(--scale-ratio)), 1.4rem);
   letter-spacing: -0.3px;
   line-height: 1.5;
   resize: none;
@@ -887,13 +914,14 @@ body::before {
   color: #aaa;
 }
 
-/* Permission button */
+/* Permission button - positioned at bottom right */
 .permission-button {
-  background-color: #ffe0e0;
-  border: 1px solid #ffcccc;
+  background-color: #000000;
+  border: 1px solid #ffffff;
   border-radius: 25px;
   padding: 10px 20px;
-  font-size: 1rem;
+  font-size: clamp(0.9rem, calc(1rem * var(--scale-ratio)), 1.2rem);
+  color: #ffffff;
   letter-spacing: -0.3px;
   display: flex;
   align-items: center;
@@ -905,10 +933,14 @@ body::before {
   height: var(--download-button-height);
   min-width: var(--download-button-width);
   contain: layout size style;
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 100;
 }
 
 .permission-button:hover {
-  background-color: #ffd0d0;
+  background-color: #323232;
   box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
 }
 
@@ -918,7 +950,7 @@ body::before {
   border: 1px solid #ddd;
   border-radius: 25px;
   padding: 10px 20px;
-  font-size: 1rem;
+  font-size: clamp(0.9rem, calc(1rem * var(--scale-ratio)), 1.2rem);
   letter-spacing: -0.3px;
   display: flex;
   align-items: center;
@@ -945,13 +977,16 @@ body::before {
 
 .button-icon {
   margin-right: 8px;
-  font-size: 1rem;
+  font-size: clamp(0.9rem, calc(1.2rem * var(--scale-ratio)), 1.4rem);
 }
 
 /* Responsive adjustments */
 @media (max-width: 600px) {
-  :root {
-    --polaroid-width: calc(100vw - 40px);
+  .permission-button {
+    bottom: 10px;
+    right: 10px;
+    font-size: 0.9rem;
+    padding: 8px 16px;
   }
 }
 </style>
