@@ -11,7 +11,7 @@
             :class="{ 'image-loaded': hasImage }"
           ></canvas>
         </div>
-        <div class="polaroid-text">Sunshine</div>
+        <div class="polaroid-text">Create your sunshine photo</div>
 
         <!-- Custom file input with message and icon -->
         <div
@@ -572,12 +572,21 @@ function downloadPolaroid(e) {
   const tempCanvas = document.createElement("canvas");
   const fixedWidth = FIXED_DOWNLOAD_WIDTH;
 
-  // Calculate the aspect ratio based on the reference design
-  const aspectRatio = 1.2; // Height is 1.2x the width for a polaroid
+  // Fixed proportions based on the reference design (500px width)
+  const fixedPaddingTop = 20; // 20px top padding at 500px width
+  const fixedPaddingSide = 20; // 20px side padding at 500px width
+  const fixedBottomPadding = 80; // 80px bottom padding at 500px width
 
-  // Set canvas dimensions with fixed width
+  // Calculate the image area dimensions
+  const imageWidth = fixedWidth - fixedPaddingSide * 2;
+  const imageHeight = imageWidth; // Square image
+
+  // Calculate total height of the polaroid
+  const totalHeight = imageHeight + fixedPaddingTop + fixedBottomPadding;
+
+  // Set canvas dimensions with fixed proportions
   tempCanvas.width = fixedWidth;
-  tempCanvas.height = fixedWidth * aspectRatio;
+  tempCanvas.height = totalHeight;
 
   const tempCtx = tempCanvas.getContext("2d");
 
@@ -585,37 +594,30 @@ function downloadPolaroid(e) {
   tempCtx.fillStyle = "white";
   tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
 
-  // Calculate the reference proportions
-  const paddingRatio = 20 / REFERENCE_WIDTH; // 20px padding at 500px width
-  const bottomPaddingRatio = 80 / REFERENCE_WIDTH; // 80px bottom padding at 500px width
-
-  // Calculate actual padding sizes for the fixed width
-  const padding = fixedWidth * paddingRatio;
-  const bottomPadding = fixedWidth * bottomPaddingRatio;
-
-  // Calculate image area dimensions
-  const imageWidth = fixedWidth - padding * 2;
-  const imageHeight = imageWidth; // Square image
-
   // Draw the image from the canvas
-  tempCtx.drawImage(canvas.value, padding, padding, imageWidth, imageHeight);
+  tempCtx.drawImage(
+    canvas.value,
+    fixedPaddingSide,
+    fixedPaddingTop,
+    imageWidth,
+    imageHeight
+  );
 
   // Add the message text at the bottom of the polaroid
   if (userMessage.value) {
     // Use consistent font size based on reference width
-    const fontSizeRatio = (1.2 / REFERENCE_WIDTH) * 16; // 1.2rem at 500px width
-    const fontSize = fixedWidth * fontSizeRatio;
+    const fontSize = 19.2; // Fixed font size for 500px width
 
     tempCtx.font = `200 ${fontSize}px Inter, sans-serif`;
     tempCtx.fillStyle = "black";
     tempCtx.textAlign = "left";
 
-    // Position text in the bottom white area
-    const textX = padding;
-    const textY = padding + imageHeight + padding * 1.5;
+    // Position text in the bottom white area - always at the same position
+    const textX = fixedPaddingSide;
+    const textY = fixedPaddingTop + imageHeight + 44; // Fixed position from the bottom of the image
 
     // Handle text wrapping for long messages
-    const maxWidth = tempCanvas.width - padding * 2;
+    const maxWidth = tempCanvas.width - fixedPaddingSide * 2;
     const words = userMessage.value.split(" ");
 
     let line = "";
@@ -679,7 +681,7 @@ body {
   justify-content: center;
   height: 100dvh;
   margin: 0;
-  background-color: #f0f0f0;
+  background-color: #000000;
   position: relative;
   overflow-x: hidden;
 }
@@ -798,7 +800,7 @@ body::before {
 .polaroid-text {
   font-family: "Inter", sans-serif;
   font-weight: 200;
-  font-size: clamp(1.2rem, calc(1.8rem * var(--scale-ratio)), 1.8rem);
+  font-size: clamp(1.2rem, calc(1.6rem * var(--scale-ratio)), 1.8rem);
   text-align: left;
   text-transform: uppercase;
   letter-spacing: -0.3px;
@@ -807,16 +809,7 @@ body::before {
   left: 0;
   width: 100%;
   margin: 0;
-  background: linear-gradient(
-    to right,
-    red,
-    orange,
-    yellow,
-    green,
-    blue,
-    indigo,
-    violet
-  );
+  background: linear-gradient(to right, red, orange, yellow, green, violet);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
