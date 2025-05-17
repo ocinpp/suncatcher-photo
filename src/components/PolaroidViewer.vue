@@ -726,7 +726,7 @@ body::before {
   align-items: center;
   justify-content: center;
   width: 100%;
-  max-width: 100%;
+  max-width: 100vw;
   padding: 20px;
   box-sizing: border-box;
   gap: 20px;
