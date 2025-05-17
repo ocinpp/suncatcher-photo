@@ -471,6 +471,27 @@ function drawImage() {
   applySunCatcherEffect();
 }
 
+function drawHolographicSheen() {
+  if (!ctx || !canvas.value) return;
+
+  ctx.save();
+  const tiltIntensity = Math.min(Math.abs(tiltX) + Math.abs(tiltY), 1);
+  ctx.globalAlpha = 0.3 * tiltIntensity;
+  const gradient = ctx.createLinearGradient(
+    canvas.value.width * (0.5 + tiltX),
+    canvas.value.height * (0.5 + tiltY),
+    canvas.value.width * (0.5 - tiltX),
+    canvas.value.height * (0.5 - tiltY)
+  );
+  gradient.addColorStop(0, "rgba(0, 255, 255, 0)");
+  gradient.addColorStop(0.5, "rgba(255, 0, 255, 0.5)");
+  gradient.addColorStop(1, "rgba(255, 255, 0, 0)");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.value.width, canvas.value.height);
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
 function applySunCatcherEffect() {
   if (!ctx || !canvas.value) return;
 
@@ -502,6 +523,9 @@ function applySunCatcherEffect() {
     ctx.drawImage(noiseTexture, 0, 0);
     ctx.globalAlpha = 1;
   }
+
+  // Holographic Sheen
+  drawHolographicSheen();
 
   // Sparkles only when tilting
   const tiltChange = Math.abs(tiltX - prevTiltX) + Math.abs(tiltY - prevTiltY);
