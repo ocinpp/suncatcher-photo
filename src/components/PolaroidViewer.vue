@@ -670,7 +670,7 @@ function downloadPolaroid(e) {
   --message-input-height: 40px;
   --download-button-height: 44px;
   --download-button-width: 180px;
-  --bg-image: none;
+  --bg-image: url("./bg.jpeg");
   --scale-ratio: 1;
 }
 
@@ -698,7 +698,7 @@ body::before {
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  filter: grayscale(100%) blur(0.5rem);
+  filter: grayscale(100%) blur(0.2rem) brightness(50%);
   z-index: -1;
   transition: background-image 0.3s;
   will-change: background-image;
