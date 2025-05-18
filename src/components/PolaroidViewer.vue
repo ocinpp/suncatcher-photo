@@ -1289,7 +1289,7 @@ function downloadPolaroid(e) {
   e.preventDefault();
   e.stopPropagation();
 
-  if (!polaroid.value || !hasImage.value) return;
+  if (!polaroid.value || !hasImage.value || !canvas.value) return;
 
   // Create a temporary canvas with fixed width of 500px
   const tempCanvas = document.createElement("canvas");
@@ -1317,115 +1317,14 @@ function downloadPolaroid(e) {
   tempCtx.fillStyle = "white";
   tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
 
-  // Create a temporary canvas for the filtered image
-  const imageCanvas = document.createElement("canvas");
-  imageCanvas.width = imageWidth;
-  imageCanvas.height = imageHeight;
-  const imageCtx = imageCanvas.getContext("2d", { willReadFrequently: true });
-
-  // Draw the image with proper aspect ratio
-  const imgWidth = image.width;
-  const imgHeight = image.height;
-  const imgRatio = imgWidth / imgHeight;
-  const canvasRatio = imageWidth / imageHeight;
-
-  let drawWidth,
-    drawHeight,
-    offsetX = 0,
-    offsetY = 0;
-
-  if (imgRatio > canvasRatio) {
-    // Image is wider than canvas (relative to height)
-    drawHeight = imageHeight;
-    drawWidth = drawHeight * imgRatio;
-    offsetX = (imageWidth - drawWidth) / 2;
-  } else {
-    // Image is taller than canvas (relative to width)
-    drawWidth = imageWidth;
-    drawHeight = drawWidth / imgRatio;
-    offsetY = (imageHeight - drawHeight) / 2;
-  }
-
-  // Draw the original image to the temporary canvas
-  imageCtx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
-
-  // Apply the selected filter to the image if filters are enabled
-  if (filtersEnabled.value) {
-    applyFilter(imageCtx, currentFilter.value, imageWidth, imageHeight);
-  }
-
-  // Apply full sun catcher effect for the download
-  // Create fixed tilt values for the download
-  const fixedTiltX = 0.2;
-  const fixedTiltY = 0.3;
-
-  // Apply main radial gradient (sun catcher effect)
-  const centerX = imageWidth / 2 + fixedTiltX * 50;
-  const centerY = imageHeight / 2 + fixedTiltY * 50;
-
-  const gradient = imageCtx.createRadialGradient(
-    centerX,
-    centerY,
-    10,
-    centerX,
-    centerY,
-    imageWidth / 1.5
+  // Draw directly from the original canvas which already has all filters and effects applied
+  tempCtx.drawImage(
+    canvas.value,
+    fixedPaddingSide,
+    fixedPaddingTop,
+    imageWidth,
+    imageHeight
   );
-
-  const hueShift = (Math.abs(fixedTiltX) + Math.abs(fixedTiltY)) * 50;
-  gradient.addColorStop(0, `hsla(${hueShift}, 80%, 70%, 0.4)`);
-  gradient.addColorStop(0.3, `hsla(${hueShift + 60}, 80%, 70%, 0.3)`);
-  gradient.addColorStop(0.6, `hsla(${hueShift + 120}, 80%, 70%, 0.3)`);
-  gradient.addColorStop(1, `hsla(${hueShift + 180}, 80%, 70%, 0.2)`);
-
-  imageCtx.fillStyle = gradient;
-  imageCtx.fillRect(0, 0, imageWidth, imageHeight);
-
-  // Add noise texture
-  const downloadNoiseTexture = createNoiseTexture(imageWidth, imageHeight);
-  imageCtx.globalAlpha = 0.1;
-  imageCtx.drawImage(downloadNoiseTexture, 0, 0);
-  imageCtx.globalAlpha = 1;
-
-  // Add holographic sheen
-  const sheenIntensity = Math.min(
-    Math.abs(fixedTiltX) + Math.abs(fixedTiltY),
-    1
-  );
-  imageCtx.globalAlpha = 0.3 * sheenIntensity;
-  const sheenGradient = imageCtx.createLinearGradient(
-    imageWidth * (0.5 + fixedTiltX),
-    imageHeight * (0.5 + fixedTiltY),
-    imageWidth * (0.5 - fixedTiltX),
-    imageHeight * (0.5 - fixedTiltY)
-  );
-  sheenGradient.addColorStop(0, "rgba(0, 255, 255, 0)");
-  sheenGradient.addColorStop(0.5, "rgba(255, 0, 255, 0.5)");
-  sheenGradient.addColorStop(1, "rgba(255, 255, 0, 0)");
-  imageCtx.fillStyle = sheenGradient;
-  imageCtx.fillRect(0, 0, imageWidth, imageHeight);
-  imageCtx.globalAlpha = 1;
-
-  // Add a sparkle for extra effect
-  const sparkleX = centerX + (Math.random() - 0.5) * 30;
-  const sparkleY = centerY + (Math.random() - 0.5) * 30;
-  const sparkleGradient = imageCtx.createRadialGradient(
-    sparkleX,
-    sparkleY,
-    0,
-    sparkleX,
-    sparkleY,
-    10
-  );
-  sparkleGradient.addColorStop(0, "rgba(255, 255, 255, 0.8)");
-  sparkleGradient.addColorStop(1, "rgba(255, 255, 255, 0)");
-  imageCtx.fillStyle = sparkleGradient;
-  imageCtx.beginPath();
-  imageCtx.arc(sparkleX, sparkleY, 10, 0, Math.PI * 2);
-  imageCtx.fill();
-
-  // Draw the filtered and effect-applied image to the final canvas
-  tempCtx.drawImage(imageCanvas, fixedPaddingSide, fixedPaddingTop);
 
   // Add the message text at the bottom of the polaroid
   if (userMessage.value) {
@@ -1893,6 +1792,11 @@ body::before {
   background: white;
   cursor: pointer;
   border: none;
+}
+
+.button-icon {
+  margin-right: 8px;
+  font-size: clamp(0.9rem, calc(1.2rem * var(--scale-ratio)), 1.4rem);
 }
 
 /* Responsive adjustments */
