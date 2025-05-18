@@ -44,6 +44,35 @@
       </div>
     </div>
 
+    <!-- Filter selector - appears when image is loaded -->
+    <div v-if="hasImage" class="filter-selector">
+      <div class="filter-label">Filters:</div>
+      <div class="filter-options">
+        <button
+          v-for="filter in availableFilters"
+          :key="filter.id"
+          @click.stop="selectFilter(filter.id)"
+          :class="{ active: currentFilter === filter.id }"
+          class="filter-button"
+        >
+          {{ filter.name }}
+        </button>
+      </div>
+
+      <!-- Filter intensity slider for applicable filters -->
+      <div v-if="showFilterIntensity" class="filter-intensity">
+        <label for="intensity-slider">Intensity:</label>
+        <input
+          type="range"
+          id="intensity-slider"
+          min="1"
+          max="100"
+          v-model="filterIntensity"
+          @input="handleIntensityChange"
+        />
+      </div>
+    </div>
+
     <!-- Download button always present but disabled when no image -->
     <button
       class="download-button"
@@ -74,7 +103,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch, nextTick } from "vue";
+import { ref, onMounted, onUnmounted, watch, nextTick, computed } from "vue";
 
 // Reactive state
 const polaroid = ref(null);
@@ -87,7 +116,11 @@ const userMessage = ref("");
 const currentImageSrc = ref("");
 const orientationPermissionGranted = ref(false);
 const needsPermissionRequest = ref(false);
+const currentFilter = ref("none"); // Default filter is none
+const filterIntensity = ref(50); // Default intensity (1-100)
 let backgroundCanvas = null;
+let originalImageData = null; // Store original image data for filters
+let processingCanvas = null; // For complex filter processing
 
 // Canvas and effect variables
 let ctx = null;
@@ -107,6 +140,43 @@ const FIXED_DOWNLOAD_WIDTH = 500; // Fixed width for downloaded images
 const MIN_POLAROID_WIDTH = 320; // Minimum width for polaroid
 const REFERENCE_WIDTH = 500; // Reference width for scaling
 
+// Available filters
+const availableFilters = [
+  { id: "none", name: "Normal" },
+  { id: "grayscale", name: "B&W" },
+  { id: "sepia", name: "Sepia" },
+  { id: "vintage", name: "Vintage" },
+  { id: "highContrast", name: "High Contrast" },
+  { id: "blur", name: "Blur" },
+  { id: "invert", name: "Invert" },
+  { id: "duotone", name: "Duotone" },
+  // Advanced filters
+  { id: "oilPaint", name: "Oil Paint" },
+  { id: "pixelate", name: "Pixelate" },
+  { id: "glitch", name: "Glitch" },
+  { id: "watercolor", name: "Watercolor" },
+  { id: "emboss", name: "Emboss" },
+  { id: "posterize", name: "Posterize" },
+  { id: "halftone", name: "Halftone" },
+];
+
+// Filters that support intensity adjustment
+const intensityFilters = [
+  "blur",
+  "pixelate",
+  "oilPaint",
+  "glitch",
+  "watercolor",
+  "emboss",
+  "posterize",
+  "halftone",
+];
+
+// Computed property to determine if we should show the intensity slider
+const showFilterIntensity = computed(() => {
+  return intensityFilters.includes(currentFilter.value);
+});
+
 // Initialize canvas and event listeners
 onMounted(() => {
   ctx = canvas.value.getContext("2d");
@@ -116,6 +186,9 @@ onMounted(() => {
 
   // Initialize canvas with proper dimensions
   resizeCanvas();
+
+  // Create processing canvas for complex filters
+  processingCanvas = document.createElement("canvas");
 
   // Set up event listeners
   window.addEventListener("resize", handleResize);
@@ -178,6 +251,13 @@ onMounted(() => {
       createResizedBackground(newSrc);
     }
   });
+
+  // Watch for filter changes and redraw the image
+  watch(currentFilter, () => {
+    if (hasImage.value && image.src) {
+      drawImage();
+    }
+  });
 });
 
 // Clean up event listeners
@@ -197,6 +277,13 @@ onUnmounted(() => {
   }
 });
 
+// Handle intensity change
+function handleIntensityChange() {
+  if (hasImage.value && image.src) {
+    drawImage();
+  }
+}
+
 // Request device orientation permission
 function requestOrientationPermission() {
   if (typeof DeviceOrientationEvent.requestPermission === "function") {
@@ -213,6 +300,16 @@ function requestOrientationPermission() {
   } else {
     // No permission needed for this device/browser
     orientationPermissionGranted.value = true;
+  }
+}
+
+// Select a filter
+function selectFilter(filterId) {
+  currentFilter.value = filterId;
+
+  // Reset intensity to default for new filter
+  if (intensityFilters.includes(filterId)) {
+    filterIntensity.value = 50;
   }
 }
 
@@ -435,6 +532,508 @@ function createNoiseTexture(width, height) {
   return noiseCanvas;
 }
 
+// Apply filter to the canvas
+function applyFilter(context, filterId, width, height) {
+  if (filterId === "none") return; // No filter
+
+  // Create a temporary canvas to apply filters
+  const tempCanvas = document.createElement("canvas");
+  tempCanvas.width = width;
+  tempCanvas.height = height;
+  const tempCtx = tempCanvas.getContext("2d");
+
+  // Copy the current canvas content to the temp canvas
+  tempCtx.drawImage(context.canvas, 0, 0);
+
+  // Get image data for pixel manipulation
+  const imageData = tempCtx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+
+  // Get intensity value (1-100)
+  const intensity = parseInt(filterIntensity.value, 10);
+
+  switch (filterId) {
+    case "grayscale":
+      // Black and White filter
+      for (let i = 0; i < data.length; i += 4) {
+        const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        data[i] = avg; // red
+        data[i + 1] = avg; // green
+        data[i + 2] = avg; // blue
+      }
+      break;
+
+    case "sepia":
+      // Sepia filter
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+
+        data[i] = Math.min(255, r * 0.393 + g * 0.769 + b * 0.189);
+        data[i + 1] = Math.min(255, r * 0.349 + g * 0.686 + b * 0.168);
+        data[i + 2] = Math.min(255, r * 0.272 + g * 0.534 + b * 0.131);
+      }
+      break;
+
+    case "vintage":
+      // Vintage filter (sepia + reduced saturation + vignette)
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+
+        // Sepia-like effect
+        data[i] = Math.min(255, r * 0.393 + g * 0.769 + b * 0.189);
+        data[i + 1] = Math.min(255, r * 0.349 + g * 0.686 + b * 0.168);
+        data[i + 2] = Math.min(255, r * 0.272 + g * 0.534 + b * 0.131);
+
+        // Reduce saturation
+        const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        data[i] = data[i] * 0.9 + avg * 0.1;
+        data[i + 1] = data[i + 1] * 0.9 + avg * 0.1;
+        data[i + 2] = data[i + 2] * 0.9 + avg * 0.1;
+      }
+
+      // Apply vignette after putting image data back
+      tempCtx.putImageData(imageData, 0, 0);
+
+      // Create vignette effect
+      const gradient = tempCtx.createRadialGradient(
+        width / 2,
+        height / 2,
+        0,
+        width / 2,
+        height / 2,
+        width * 0.7
+      );
+      gradient.addColorStop(0, "rgba(0,0,0,0)");
+      gradient.addColorStop(1, "rgba(0,0,0,0.3)");
+
+      tempCtx.fillStyle = gradient;
+      tempCtx.globalCompositeOperation = "multiply";
+      tempCtx.fillRect(0, 0, width, height);
+      tempCtx.globalCompositeOperation = "source-over";
+
+      // Draw the result back to the original context
+      context.drawImage(tempCanvas, 0, 0);
+      return; // Skip the imageData.putData below since we've already drawn
+
+    case "highContrast":
+      // High contrast filter
+      for (let i = 0; i < data.length; i += 4) {
+        data[i] = data[i] < 127 ? data[i] * 0.8 : data[i] * 1.2;
+        data[i + 1] = data[i + 1] < 127 ? data[i + 1] * 0.8 : data[i + 1] * 1.2;
+        data[i + 2] = data[i + 2] < 127 ? data[i + 2] * 0.8 : data[i + 2] * 1.2;
+      }
+      break;
+
+    case "blur":
+      // Blur with adjustable intensity
+      const blurAmount = Math.max(1, Math.floor(intensity / 10)); // 1-10px blur
+      tempCtx.putImageData(imageData, 0, 0);
+      tempCtx.filter = `blur(${blurAmount}px)`;
+      tempCtx.drawImage(tempCanvas, 0, 0);
+      context.drawImage(tempCanvas, 0, 0);
+      return; // Skip the imageData.putData below
+
+    case "invert":
+      // Invert colors
+      for (let i = 0; i < data.length; i += 4) {
+        data[i] = 255 - data[i];
+        data[i + 1] = 255 - data[i + 1];
+        data[i + 2] = 255 - data[i + 2];
+      }
+      break;
+
+    case "duotone":
+      // Duotone (blue and pink)
+      for (let i = 0; i < data.length; i += 4) {
+        const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        if (avg < 128) {
+          // Shadows to blue
+          data[i] = avg * 0.4;
+          data[i + 1] = avg * 0.4;
+          data[i + 2] = avg * 1.2;
+        } else {
+          // Highlights to pink
+          data[i] = avg * 1.2;
+          data[i + 1] = avg * 0.4;
+          data[i + 2] = avg * 1.0;
+        }
+      }
+      break;
+
+    case "pixelate":
+      // Pixelate effect with adjustable block size
+      const blockSize = Math.max(2, Math.floor(intensity / 5)); // 2-20px blocks
+
+      // Put the original image data back
+      tempCtx.putImageData(imageData, 0, 0);
+
+      // Create pixelation by drawing the image at a smaller size and scaling back up
+      const smallCanvas = document.createElement("canvas");
+      const smallCtx = smallCanvas.getContext("2d");
+
+      // Calculate the scaled-down dimensions
+      const scaledWidth = Math.ceil(width / blockSize);
+      const scaledHeight = Math.ceil(height / blockSize);
+
+      smallCanvas.width = scaledWidth;
+      smallCanvas.height = scaledHeight;
+
+      // Draw the image at a smaller size
+      smallCtx.drawImage(tempCanvas, 0, 0, scaledWidth, scaledHeight);
+
+      // Clear the temp canvas
+      tempCtx.clearRect(0, 0, width, height);
+
+      // Draw the small image back to the temp canvas, scaled up to create pixelation
+      tempCtx.imageSmoothingEnabled = false; // Disable smoothing for pixelated look
+      tempCtx.drawImage(smallCanvas, 0, 0, width, height);
+
+      // Draw the result back to the original context
+      context.drawImage(tempCanvas, 0, 0);
+      return;
+
+    case "oilPaint":
+      // Oil paint effect with adjustable intensity
+      const radius = Math.max(1, Math.floor(intensity / 10)); // 1-10px radius
+      const numLevels = 16; // Number of color levels
+
+      // Create a new array to store the oil paint data
+      const oilData = new Uint8ClampedArray(data.length);
+
+      // For each pixel in the image
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          // Initialize arrays to store intensity counts and color sums
+          const intensityCounts = new Array(numLevels).fill(0);
+          const redSums = new Array(numLevels).fill(0);
+          const greenSums = new Array(numLevels).fill(0);
+          const blueSums = new Array(numLevels).fill(0);
+
+          // Sample the surrounding pixels
+          for (let dy = -radius; dy <= radius; dy++) {
+            for (let dx = -radius; dx <= radius; dx++) {
+              const nx = Math.min(Math.max(x + dx, 0), width - 1);
+              const ny = Math.min(Math.max(y + dy, 0), height - 1);
+
+              const i = (ny * width + nx) * 4;
+
+              // Calculate intensity level
+              const r = data[i];
+              const g = data[i + 1];
+              const b = data[i + 2];
+              const intensity = Math.floor(
+                (((r + g + b) / 3) * numLevels) / 255
+              );
+
+              // Accumulate colors at this intensity
+              intensityCounts[intensity]++;
+              redSums[intensity] += r;
+              greenSums[intensity] += g;
+              blueSums[intensity] += b;
+            }
+          }
+
+          // Find the most common intensity
+          let maxCount = 0;
+          let maxIndex = 0;
+          for (let i = 0; i < numLevels; i++) {
+            if (intensityCounts[i] > maxCount) {
+              maxCount = intensityCounts[i];
+              maxIndex = i;
+            }
+          }
+
+          // Calculate the average color at the most common intensity
+          const outputIndex = (y * width + x) * 4;
+          if (maxCount > 0) {
+            oilData[outputIndex] = Math.floor(redSums[maxIndex] / maxCount);
+            oilData[outputIndex + 1] = Math.floor(
+              greenSums[maxIndex] / maxCount
+            );
+            oilData[outputIndex + 2] = Math.floor(
+              blueSums[maxIndex] / maxCount
+            );
+            oilData[outputIndex + 3] = 255; // Alpha
+          } else {
+            // Fallback if no samples were found (shouldn't happen)
+            oilData[outputIndex] = data[(y * width + x) * 4];
+            oilData[outputIndex + 1] = data[(y * width + x) * 4 + 1];
+            oilData[outputIndex + 2] = data[(y * width + x) * 4 + 2];
+            oilData[outputIndex + 3] = 255;
+          }
+        }
+      }
+
+      // Create a new ImageData object with the oil paint data
+      const oilImageData = new ImageData(oilData, width, height);
+
+      // Put the oil paint data back to the temp canvas
+      tempCtx.putImageData(oilImageData, 0, 0);
+
+      // Draw the result back to the original context
+      context.drawImage(tempCanvas, 0, 0);
+      return;
+
+    case "glitch":
+      // Glitch effect with adjustable intensity
+      const glitchAmount = intensity / 100; // 0-1 range
+
+      // Put the original image data back
+      tempCtx.putImageData(imageData, 0, 0);
+
+      // Create RGB shift
+      tempCtx.globalCompositeOperation = "lighten";
+
+      // Red channel shift
+      tempCtx.fillStyle = "rgba(255,0,0,0.5)";
+      tempCtx.fillRect(
+        -glitchAmount * 10,
+        0,
+        width + glitchAmount * 20,
+        height
+      );
+
+      // Blue channel shift
+      tempCtx.fillStyle = "rgba(0,0,255,0.5)";
+      tempCtx.fillRect(glitchAmount * 10, 0, width - glitchAmount * 20, height);
+
+      // Create random glitch blocks
+      tempCtx.globalCompositeOperation = "source-over";
+
+      const numGlitches = Math.floor(glitchAmount * 10);
+      for (let i = 0; i < numGlitches; i++) {
+        // Random position and size
+        const glitchX = Math.random() * width;
+        const glitchY = Math.random() * height;
+        const glitchW = Math.random() * 100 * glitchAmount + 20;
+        const glitchH = Math.random() * 50 * glitchAmount + 10;
+
+        // Random source position
+        const srcX = Math.random() * width;
+        const srcY = Math.random() * height;
+
+        // Copy a random block to a random position
+        tempCtx.drawImage(
+          tempCanvas,
+          srcX,
+          srcY,
+          glitchW,
+          glitchH,
+          glitchX,
+          glitchY,
+          glitchW,
+          glitchH
+        );
+      }
+
+      // Add some noise
+      const noiseOpacity = glitchAmount * 0.2;
+      for (let i = 0; i < (width * height) / 50; i++) {
+        const noiseX = Math.random() * width;
+        const noiseY = Math.random() * height;
+        const noiseW = Math.random() * 20 + 1;
+        const noiseH = Math.random() * 2 + 1;
+
+        tempCtx.fillStyle = `rgba(${Math.random() * 255},${
+          Math.random() * 255
+        },${Math.random() * 255},${noiseOpacity})`;
+        tempCtx.fillRect(noiseX, noiseY, noiseW, noiseH);
+      }
+
+      // Draw the result back to the original context
+      context.drawImage(tempCanvas, 0, 0);
+      return;
+
+    case "watercolor":
+      // Watercolor effect with adjustable intensity
+      const blurRadius = Math.max(1, Math.floor(intensity / 20)); // 1-5px blur
+      const edgeStrength = intensity / 100; // 0-1 range
+
+      // First apply a slight blur
+      tempCtx.putImageData(imageData, 0, 0);
+      tempCtx.filter = `blur(${blurRadius}px)`;
+      tempCtx.drawImage(tempCanvas, 0, 0);
+
+      // Get the blurred image data
+      const blurredData = tempCtx.getImageData(0, 0, width, height).data;
+
+      // Create a new array for the watercolor effect
+      const watercolorData = new Uint8ClampedArray(data.length);
+
+      // Apply edge detection and color bleeding
+      for (let y = 1; y < height - 1; y++) {
+        for (let x = 1; x < width - 1; x++) {
+          const i = (y * width + x) * 4;
+
+          // Get surrounding pixels
+          const topIdx = ((y - 1) * width + x) * 4;
+          const bottomIdx = ((y + 1) * width + x) * 4;
+          const leftIdx = (y * width + (x - 1)) * 4;
+          const rightIdx = (y * width + (x + 1)) * 4;
+
+          // Calculate edge strength (simple Sobel-like)
+          const edgeX =
+            (blurredData[rightIdx] -
+              blurredData[leftIdx] +
+              blurredData[rightIdx + 1] -
+              blurredData[leftIdx + 1] +
+              blurredData[rightIdx + 2] -
+              blurredData[leftIdx + 2]) /
+            3;
+
+          const edgeY =
+            (blurredData[bottomIdx] -
+              blurredData[topIdx] +
+              blurredData[bottomIdx + 1] -
+              blurredData[topIdx + 1] +
+              blurredData[bottomIdx + 2] -
+              blurredData[topIdx + 2]) /
+            3;
+
+          const edgeMagnitude =
+            Math.sqrt(edgeX * edgeX + edgeY * edgeY) * edgeStrength;
+
+          // Apply watercolor effect - enhance edges and blend colors
+          watercolorData[i] = Math.min(255, blurredData[i] + edgeMagnitude);
+          watercolorData[i + 1] = Math.min(
+            255,
+            blurredData[i + 1] + edgeMagnitude
+          );
+          watercolorData[i + 2] = Math.min(
+            255,
+            blurredData[i + 2] + edgeMagnitude
+          );
+          watercolorData[i + 3] = 255;
+        }
+      }
+
+      // Create a new ImageData object with the watercolor data
+      const watercolorImageData = new ImageData(watercolorData, width, height);
+
+      // Put the watercolor data back to the temp canvas
+      tempCtx.putImageData(watercolorImageData, 0, 0);
+
+      // Add a paper texture effect
+      tempCtx.globalCompositeOperation = "multiply";
+      tempCtx.fillStyle = "rgba(240, 240, 230, 0.5)";
+      tempCtx.fillRect(0, 0, width, height);
+
+      // Draw the result back to the original context
+      context.drawImage(tempCanvas, 0, 0);
+      return;
+
+    case "emboss":
+      // Emboss effect with adjustable intensity
+      const embossStrength = intensity / 50; // 0-2 range
+
+      // Create a new array for the emboss effect
+      const embossData = new Uint8ClampedArray(data.length);
+
+      // Apply emboss filter
+      for (let y = 1; y < height - 1; y++) {
+        for (let x = 1; x < width - 1; x++) {
+          const i = (y * width + x) * 4;
+          const topLeftIdx = ((y - 1) * width + (x - 1)) * 4;
+          const bottomRightIdx = ((y + 1) * width + (x + 1)) * 4;
+
+          // Calculate emboss value for each channel
+          for (let c = 0; c < 3; c++) {
+            const embossValue =
+              (data[topLeftIdx + c] - data[bottomRightIdx + c]) *
+                embossStrength +
+              128;
+            embossData[i + c] = Math.min(255, Math.max(0, embossValue));
+          }
+
+          embossData[i + 3] = 255; // Alpha
+        }
+      }
+
+      // Create a new ImageData object with the emboss data
+      const embossImageData = new ImageData(embossData, width, height);
+
+      // Put the emboss data back to the temp canvas
+      tempCtx.putImageData(embossImageData, 0, 0);
+
+      // Draw the result back to the original context
+      context.drawImage(tempCanvas, 0, 0);
+      return;
+
+    case "posterize":
+      // Posterize effect with adjustable levels
+      const levels = Math.max(2, Math.floor(intensity / 10)); // 2-10 levels
+      const step = 255 / (levels - 1);
+
+      for (let i = 0; i < data.length; i += 4) {
+        // Posterize each channel
+        data[i] = Math.round(data[i] / step) * step;
+        data[i + 1] = Math.round(data[i + 1] / step) * step;
+        data[i + 2] = Math.round(data[i + 2] / step) * step;
+      }
+      break;
+
+    case "halftone":
+      // Halftone effect with adjustable dot size
+      const dotSize = Math.max(3, Math.floor(intensity / 5)); // 3-20px dots
+      const spacing = dotSize;
+
+      // Put the original image data back
+      tempCtx.putImageData(imageData, 0, 0);
+
+      // Create a new canvas for the halftone effect
+      const dotCanvas = document.createElement("canvas");
+      dotCanvas.width = width;
+      dotCanvas.height = height;
+      const dotCtx = dotCanvas.getContext("2d");
+
+      // Fill with white background
+      dotCtx.fillStyle = "white";
+      dotCtx.fillRect(0, 0, width, height);
+
+      // Draw dots
+      dotCtx.fillStyle = "black";
+
+      for (let y = spacing / 2; y < height; y += spacing) {
+        for (let x = spacing / 2; x < width; x += spacing) {
+          // Get the color at this position
+          const i = (Math.floor(y) * width + Math.floor(x)) * 4;
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+
+          // Calculate brightness (0-1)
+          const brightness = (r + g + b) / (3 * 255);
+
+          // Calculate dot radius based on brightness
+          const radius = ((1 - brightness) * dotSize) / 2;
+
+          // Draw the dot
+          dotCtx.beginPath();
+          dotCtx.arc(x, y, radius, 0, Math.PI * 2);
+          dotCtx.fill();
+        }
+      }
+
+      // Draw the halftone canvas back to the temp canvas
+      tempCtx.clearRect(0, 0, width, height);
+      tempCtx.drawImage(dotCanvas, 0, 0);
+
+      // Draw the result back to the original context
+      context.drawImage(tempCanvas, 0, 0);
+      return;
+  }
+
+  // Put the modified image data back to the temp canvas
+  tempCtx.putImageData(imageData, 0, 0);
+
+  // Draw the result back to the original context
+  context.drawImage(tempCanvas, 0, 0);
+}
+
 function drawImage() {
   if (!ctx || !canvas.value) return;
 
@@ -467,7 +1066,13 @@ function drawImage() {
     offsetY = (canvasHeight - drawHeight) / 2;
   }
 
+  // Draw the original image
   ctx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
+
+  // Apply selected filter
+  applyFilter(ctx, currentFilter.value, canvasWidth, canvasHeight);
+
+  // Apply special effects after the filter
   applySunCatcherEffect();
 }
 
@@ -618,14 +1223,67 @@ function downloadPolaroid(e) {
   tempCtx.fillStyle = "white";
   tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
 
-  // Draw the image from the canvas
-  tempCtx.drawImage(
-    canvas.value,
-    fixedPaddingSide,
-    fixedPaddingTop,
-    imageWidth,
-    imageHeight
+  // Create a temporary canvas for the filtered image
+  const imageCanvas = document.createElement("canvas");
+  imageCanvas.width = imageWidth;
+  imageCanvas.height = imageHeight;
+  const imageCtx = imageCanvas.getContext("2d");
+
+  // Draw the image with proper aspect ratio
+  const imgWidth = image.width;
+  const imgHeight = image.height;
+  const imgRatio = imgWidth / imgHeight;
+  const canvasRatio = imageWidth / imageHeight;
+
+  let drawWidth,
+    drawHeight,
+    offsetX = 0,
+    offsetY = 0;
+
+  if (imgRatio > canvasRatio) {
+    // Image is wider than canvas (relative to height)
+    drawHeight = imageHeight;
+    drawWidth = drawHeight * imgRatio;
+    offsetX = (imageWidth - drawWidth) / 2;
+  } else {
+    // Image is taller than canvas (relative to width)
+    drawWidth = imageWidth;
+    drawHeight = drawWidth / imgRatio;
+    offsetY = (imageHeight - drawHeight) / 2;
+  }
+
+  // Draw the original image to the temporary canvas
+  imageCtx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
+
+  // Apply the selected filter to the image
+  applyFilter(imageCtx, currentFilter.value, imageWidth, imageHeight);
+
+  // Apply sun catcher effect for the download
+  const centerX = imageWidth / 2;
+  const centerY = imageHeight / 2;
+
+  const gradient = imageCtx.createRadialGradient(
+    centerX,
+    centerY,
+    10,
+    centerX,
+    centerY,
+    imageWidth / 1.5
   );
+
+  const hueShift = 30; // Fixed hue shift for download
+  gradient.addColorStop(0, `hsla(${hueShift}, 80%, 70%, 0.4)`);
+  gradient.addColorStop(0.3, `hsla(${hueShift + 60}, 80%, 70%, 0.3)`);
+  gradient.addColorStop(0.6, `hsla(${hueShift + 120}, 80%, 70%, 0.3)`);
+  gradient.addColorStop(1, `hsla(${hueShift + 180}, 80%, 70%, 0.2)`);
+
+  imageCtx.fillStyle = gradient;
+  imageCtx.globalCompositeOperation = "soft-light";
+  imageCtx.fillRect(0, 0, imageWidth, imageHeight);
+  imageCtx.globalCompositeOperation = "source-over";
+
+  // Draw the filtered and effect-applied image to the final canvas
+  tempCtx.drawImage(imageCanvas, fixedPaddingSide, fixedPaddingTop);
 
   // Add the message text at the bottom of the polaroid
   if (userMessage.value) {
@@ -931,6 +1589,102 @@ body::before {
   color: #aaa;
 }
 
+/* Filter selector */
+.filter-selector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 10px;
+  margin-bottom: 10px;
+  width: 100%;
+  max-width: var(--polaroid-width);
+}
+
+.filter-label {
+  font-family: "Inter", sans-serif;
+  font-weight: 400;
+  font-size: clamp(0.9rem, calc(1rem * var(--scale-ratio)), 1.2rem);
+  color: white;
+  margin-bottom: 8px;
+}
+
+.filter-options {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.filter-button {
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  padding: 6px 12px;
+  font-family: "Inter", sans-serif;
+  font-size: clamp(0.8rem, calc(0.9rem * var(--scale-ratio)), 1rem);
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.filter-button:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.filter-button.active {
+  background-color: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+  font-weight: bold;
+}
+
+/* Filter intensity slider */
+.filter-intensity {
+  display: flex;
+  align-items: center;
+  margin-top: 10px;
+  width: 100%;
+  max-width: 300px;
+  padding: 0 10px;
+}
+
+.filter-intensity label {
+  font-family: "Inter", sans-serif;
+  font-size: clamp(0.8rem, calc(0.9rem * var(--scale-ratio)), 1rem);
+  color: white;
+  margin-right: 10px;
+  white-space: nowrap;
+}
+
+.filter-intensity input[type="range"] {
+  flex: 1;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  outline: none;
+}
+
+.filter-intensity input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: white;
+  cursor: pointer;
+}
+
+.filter-intensity input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: white;
+  cursor: pointer;
+  border: none;
+}
+
 /* Permission button - positioned at bottom right */
 .permission-button {
   background-color: #000000;
@@ -1004,6 +1758,31 @@ body::before {
     right: 10px;
     font-size: 0.9rem;
     padding: 8px 16px;
+  }
+
+  .filter-options {
+    max-width: 100%;
+    padding: 0 10px;
+  }
+
+  .filter-button {
+    padding: 4px 8px;
+    font-size: 0.8rem;
+  }
+
+  .filter-intensity {
+    max-width: 90%;
+  }
+}
+
+@media (max-width: 400px) {
+  .filter-options {
+    gap: 4px;
+  }
+
+  .filter-button {
+    padding: 3px 6px;
+    font-size: 0.7rem;
   }
 }
 </style>
