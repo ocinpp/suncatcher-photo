@@ -44,55 +44,72 @@
       </div>
     </div>
 
-    <!-- Filter selector - appears when image is loaded -->
-    <div v-if="hasImage" class="filter-selector">
-      <div class="filter-label">Filters:</div>
-      <div class="filter-options">
+    <!-- Filter controls - appears when image is loaded -->
+    <div v-if="hasImage" class="filter-controls">
+      <!-- Top row for all buttons -->
+      <div class="filter-controls-top-row">
+        <!-- Permission button for device orientation -->
         <button
-          v-for="filter in availableFilters"
-          :key="filter.id"
-          @click.stop="selectFilter(filter.id)"
-          :class="{ active: currentFilter === filter.id }"
-          class="filter-button"
+          v-if="!orientationPermissionGranted && needsPermissionRequest"
+          @click="requestOrientationPermission"
+          class="action-button"
         >
-          {{ filter.name }}
+          <span class="button-icon">✨</span>
+          Enable Effects
+        </button>
+
+        <!-- Filter toggle button -->
+        <button
+          @click="toggleFilters"
+          class="action-button"
+          :class="{ active: filtersEnabled }"
+        >
+          <span class="button-icon">🎨</span>
+          {{ filtersEnabled ? "Disable Filters" : "Enable Filters" }}
+        </button>
+
+        <!-- Download button -->
+        <button
+          class="action-button"
+          @click.stop="downloadPolaroid"
+          :disabled="!hasImage"
+          :class="{ disabled: !hasImage }"
+        >
+          <span class="button-icon">💾</span>
+          Download
         </button>
       </div>
 
-      <!-- Filter intensity slider for applicable filters -->
-      <div v-if="showFilterIntensity" class="filter-intensity">
-        <label for="intensity-slider">Intensity:</label>
-        <input
-          type="range"
-          id="intensity-slider"
-          min="1"
-          max="100"
-          v-model="filterIntensity"
-          @input="handleIntensityChange"
-        />
+      <!-- Horizontal scrollable filter selector -->
+      <div v-if="filtersEnabled" class="filter-selector">
+        <div class="filter-options-container">
+          <div class="filter-options">
+            <button
+              v-for="filter in availableFilters"
+              :key="filter.id"
+              @click.stop="selectFilter(filter.id)"
+              :class="{ active: currentFilter === filter.id }"
+              class="filter-button"
+            >
+              {{ filter.name }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Filter intensity slider for applicable filters -->
+        <div v-show="showFilterIntensity" class="filter-intensity">
+          <label for="intensity-slider">Intensity:</label>
+          <input
+            type="range"
+            id="intensity-slider"
+            min="1"
+            max="100"
+            v-model="filterIntensity"
+            @input="handleIntensityChange"
+          />
+        </div>
       </div>
     </div>
-
-    <!-- Download button always present but disabled when no image -->
-    <button
-      class="download-button"
-      @click.stop="downloadPolaroid"
-      :disabled="!hasImage"
-      :class="{ disabled: !hasImage }"
-    >
-      <span class="button-icon">💾</span>
-      Download
-    </button>
-
-    <!-- Permission button for device orientation - positioned at bottom right -->
-    <button
-      v-if="!orientationPermissionGranted && needsPermissionRequest"
-      class="permission-button"
-      @click="requestOrientationPermission"
-    >
-      <span class="button-icon">✨</span>
-      Enable Effects
-    </button>
   </div>
 
   <!-- Add this to ensure the Inter font is loaded -->
@@ -118,6 +135,7 @@ const orientationPermissionGranted = ref(false);
 const needsPermissionRequest = ref(false);
 const currentFilter = ref("none"); // Default filter is none
 const filterIntensity = ref(50); // Default intensity (1-100)
+const filtersEnabled = ref(true); // New state for filter toggle
 let backgroundCanvas = null;
 let originalImageData = null; // Store original image data for filters
 let processingCanvas = null; // For complex filter processing
@@ -174,12 +192,37 @@ const intensityFilters = [
 
 // Computed property to determine if we should show the intensity slider
 const showFilterIntensity = computed(() => {
-  return intensityFilters.includes(currentFilter.value);
+  return filtersEnabled.value && intensityFilters.includes(currentFilter.value);
 });
+
+// Toggle filters on/off
+function toggleFilters() {
+  filtersEnabled.value = !filtersEnabled.value;
+
+  // If disabling filters, set to normal
+  if (!filtersEnabled.value) {
+    const previousFilter = currentFilter.value;
+    currentFilter.value = "none";
+
+    // Redraw the image without filters
+    if (hasImage.value && image.src) {
+      drawImage();
+    }
+
+    // Store the previous filter to restore when re-enabling
+    currentFilter.value = previousFilter;
+  } else {
+    // Redraw with the current filter when re-enabling
+    if (hasImage.value && image.src) {
+      drawImage();
+    }
+  }
+}
 
 // Initialize canvas and event listeners
 onMounted(() => {
-  ctx = canvas.value.getContext("2d");
+  // Create canvas context with willReadFrequently attribute to fix performance warning
+  ctx = canvas.value.getContext("2d", { willReadFrequently: true });
 
   // Set initial dimensions before any content loads
   setInitialDimensions();
@@ -258,7 +301,26 @@ onMounted(() => {
       drawImage();
     }
   });
+
+  // Initialize horizontal scrolling for filter options
+  nextTick(() => {
+    initializeHorizontalScroll();
+  });
 });
+
+// Initialize horizontal scrolling for filter options
+function initializeHorizontalScroll() {
+  const filterOptions = document.querySelector(".filter-options");
+  if (filterOptions) {
+    // Enable mouse wheel horizontal scrolling
+    filterOptions.addEventListener("wheel", (e) => {
+      if (e.deltaY !== 0) {
+        e.preventDefault();
+        filterOptions.scrollLeft += e.deltaY;
+      }
+    });
+  }
+}
 
 // Clean up event listeners
 onUnmounted(() => {
@@ -317,6 +379,11 @@ function selectFilter(filterId) {
 function handleResize() {
   setInitialDimensions();
   resizeCanvas();
+
+  // Re-initialize horizontal scrolling after resize
+  nextTick(() => {
+    initializeHorizontalScroll();
+  });
 }
 
 function setInitialDimensions() {
@@ -460,8 +527,10 @@ function createResizedBackground(imageSrc) {
       backgroundCanvas.width = newWidth;
       backgroundCanvas.height = newHeight;
 
-      // Draw resized image to canvas
-      const bgCtx = backgroundCanvas.getContext("2d");
+      // Draw resized image to canvas - use willReadFrequently for better performance
+      const bgCtx = backgroundCanvas.getContext("2d", {
+        willReadFrequently: true,
+      });
       bgCtx.drawImage(bgImage, 0, 0, newWidth, newHeight);
 
       // Get data URL of resized image
@@ -517,7 +586,7 @@ function createNoiseTexture(width, height) {
   const noiseCanvas = document.createElement("canvas");
   noiseCanvas.width = width;
   noiseCanvas.height = height;
-  const noiseCtx = noiseCanvas.getContext("2d");
+  const noiseCtx = noiseCanvas.getContext("2d", { willReadFrequently: true });
   const imageData = noiseCtx.createImageData(width, height);
 
   for (let i = 0; i < imageData.data.length; i += 4) {
@@ -534,13 +603,14 @@ function createNoiseTexture(width, height) {
 
 // Apply filter to the canvas
 function applyFilter(context, filterId, width, height) {
-  if (filterId === "none") return; // No filter
+  // Skip filter application if filters are disabled
+  if (!filtersEnabled.value || filterId === "none") return;
 
   // Create a temporary canvas to apply filters
   const tempCanvas = document.createElement("canvas");
   tempCanvas.width = width;
   tempCanvas.height = height;
-  const tempCtx = tempCanvas.getContext("2d");
+  const tempCtx = tempCanvas.getContext("2d", { willReadFrequently: true });
 
   // Copy the current canvas content to the temp canvas
   tempCtx.drawImage(context.canvas, 0, 0);
@@ -673,7 +743,9 @@ function applyFilter(context, filterId, width, height) {
 
       // Create pixelation by drawing the image at a smaller size and scaling back up
       const smallCanvas = document.createElement("canvas");
-      const smallCtx = smallCanvas.getContext("2d");
+      const smallCtx = smallCanvas.getContext("2d", {
+        willReadFrequently: true,
+      });
 
       // Calculate the scaled-down dimensions
       const scaledWidth = Math.ceil(width / blockSize);
@@ -965,8 +1037,8 @@ function applyFilter(context, filterId, width, height) {
 
     case "posterize":
       // Posterize effect with adjustable levels
-      const levels = Math.max(2, Math.floor(intensity / 10)); // 2-10 levels
-      const step = 255 / (levels - 1);
+      const posterizeLevels = Math.max(2, Math.floor(intensity / 10)); // 2-10 levels
+      const step = 255 / (posterizeLevels - 1);
 
       for (let i = 0; i < data.length; i += 4) {
         // Posterize each channel
@@ -988,7 +1060,7 @@ function applyFilter(context, filterId, width, height) {
       const dotCanvas = document.createElement("canvas");
       dotCanvas.width = width;
       dotCanvas.height = height;
-      const dotCtx = dotCanvas.getContext("2d");
+      const dotCtx = dotCanvas.getContext("2d", { willReadFrequently: true });
 
       // Fill with white background
       dotCtx.fillStyle = "white";
@@ -1069,8 +1141,10 @@ function drawImage() {
   // Draw the original image
   ctx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
 
-  // Apply selected filter
-  applyFilter(ctx, currentFilter.value, canvasWidth, canvasHeight);
+  // Apply selected filter if filters are enabled
+  if (filtersEnabled.value) {
+    applyFilter(ctx, currentFilter.value, canvasWidth, canvasHeight);
+  }
 
   // Apply special effects after the filter
   applySunCatcherEffect();
@@ -1217,7 +1291,7 @@ function downloadPolaroid(e) {
   tempCanvas.width = fixedWidth;
   tempCanvas.height = totalHeight;
 
-  const tempCtx = tempCanvas.getContext("2d");
+  const tempCtx = tempCanvas.getContext("2d", { willReadFrequently: true });
 
   // Draw white background for the entire polaroid
   tempCtx.fillStyle = "white";
@@ -1227,7 +1301,7 @@ function downloadPolaroid(e) {
   const imageCanvas = document.createElement("canvas");
   imageCanvas.width = imageWidth;
   imageCanvas.height = imageHeight;
-  const imageCtx = imageCanvas.getContext("2d");
+  const imageCtx = imageCanvas.getContext("2d", { willReadFrequently: true });
 
   // Draw the image with proper aspect ratio
   const imgWidth = image.width;
@@ -1255,8 +1329,10 @@ function downloadPolaroid(e) {
   // Draw the original image to the temporary canvas
   imageCtx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
 
-  // Apply the selected filter to the image
-  applyFilter(imageCtx, currentFilter.value, imageWidth, imageHeight);
+  // Apply the selected filter to the image if filters are enabled
+  if (filtersEnabled.value) {
+    applyFilter(imageCtx, currentFilter.value, imageWidth, imageHeight);
+  }
 
   // Apply sun catcher effect for the download
   const centerX = imageWidth / 2;
@@ -1589,8 +1665,8 @@ body::before {
   color: #aaa;
 }
 
-/* Filter selector */
-.filter-selector {
+/* Filter controls */
+.filter-controls {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1600,24 +1676,78 @@ body::before {
   max-width: var(--polaroid-width);
 }
 
-.filter-label {
+/* Top row for all buttons */
+.filter-controls-top-row {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  width: 100%;
+}
+
+/* Common button style for all action buttons */
+.action-button {
+  background-color: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 25px;
+  padding: 8px 16px;
   font-family: "Inter", sans-serif;
-  font-weight: 400;
   font-size: clamp(0.9rem, calc(1rem * var(--scale-ratio)), 1.2rem);
   color: white;
-  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+}
+
+.action-button:hover:not(.disabled) {
+  background-color: rgba(0, 0, 0, 0.8);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.action-button.active {
+  background-color: rgba(0, 0, 0, 0.9);
+  border-color: rgba(255, 255, 255, 0.7);
+}
+
+.action-button.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Filter selector with horizontal scrolling */
+.filter-selector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.filter-options-container {
+  width: 100%;
+  max-width: var(--polaroid-width);
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+  margin-bottom: 10px;
+}
+
+.filter-options-container::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
 }
 
 .filter-options {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  flex-wrap: nowrap;
   gap: 8px;
-  width: 100%;
+  padding: 4px;
+  min-width: min-content;
 }
 
 .filter-button {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(0, 0, 0, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 20px;
   padding: 6px 12px;
@@ -1626,15 +1756,18 @@ body::before {
   color: white;
   cursor: pointer;
   transition: all 0.2s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .filter-button:hover {
-  background-color: rgba(255, 255, 255, 0.2);
+  background-color: rgba(0, 0, 0, 0.8);
+  border-color: rgba(255, 255, 255, 0.4);
 }
 
 .filter-button.active {
-  background-color: rgba(255, 255, 255, 0.3);
-  border-color: rgba(255, 255, 255, 0.5);
+  background-color: rgba(0, 0, 0, 0.9);
+  border-color: rgba(255, 255, 255, 0.7);
   font-weight: bold;
 }
 
@@ -1642,7 +1775,6 @@ body::before {
 .filter-intensity {
   display: flex;
   align-items: center;
-  margin-top: 10px;
   width: 100%;
   max-width: 300px;
   padding: 0 10px;
@@ -1685,72 +1817,6 @@ body::before {
   border: none;
 }
 
-/* Permission button - positioned at bottom right */
-.permission-button {
-  background-color: #000000;
-  border: 1px solid #ffffff;
-  border-radius: 25px;
-  padding: 10px 20px;
-  font-size: clamp(0.9rem, calc(1rem * var(--scale-ratio)), 1.2rem);
-  color: #ffffff;
-  letter-spacing: -0.3px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  margin-top: 10px;
-  height: var(--download-button-height);
-  min-width: var(--download-button-width);
-  contain: layout size style;
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  z-index: 100;
-}
-
-.permission-button:hover {
-  background-color: #323232;
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
-}
-
-/* Download button below the polaroid */
-.download-button {
-  background-color: #f0f8ff;
-  border: 1px solid #ddd;
-  border-radius: 25px;
-  padding: 10px 20px;
-  font-size: clamp(0.9rem, calc(1rem * var(--scale-ratio)), 1.2rem);
-  letter-spacing: -0.3px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  margin-top: 10px;
-  height: var(--download-button-height);
-  min-width: var(--download-button-width);
-  contain: layout size style;
-}
-
-.download-button:hover:not(.disabled) {
-  background-color: #e6f2ff;
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
-}
-
-.download-button.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  background-color: #f5f5f5;
-}
-
-.button-icon {
-  margin-right: 8px;
-  font-size: clamp(0.9rem, calc(1.2rem * var(--scale-ratio)), 1.4rem);
-}
-
 /* Responsive adjustments */
 @media (max-width: 600px) {
   .permission-button {
@@ -1760,28 +1826,14 @@ body::before {
     padding: 8px 16px;
   }
 
-  .filter-options {
-    max-width: 100%;
-    padding: 0 10px;
-  }
-
-  .filter-button {
-    padding: 4px 8px;
-    font-size: 0.8rem;
-  }
-
   .filter-intensity {
     max-width: 90%;
   }
 }
 
 @media (max-width: 400px) {
-  .filter-options {
-    gap: 4px;
-  }
-
   .filter-button {
-    padding: 3px 6px;
+    padding: 4px 8px;
     font-size: 0.7rem;
   }
 }
