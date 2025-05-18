@@ -1354,9 +1354,14 @@ function downloadPolaroid(e) {
     applyFilter(imageCtx, currentFilter.value, imageWidth, imageHeight);
   }
 
-  // Apply sun catcher effect for the download
-  const centerX = imageWidth / 2;
-  const centerY = imageHeight / 2;
+  // Apply full sun catcher effect for the download
+  // Create fixed tilt values for the download
+  const fixedTiltX = 0.2;
+  const fixedTiltY = 0.3;
+
+  // Apply main radial gradient (sun catcher effect)
+  const centerX = imageWidth / 2 + fixedTiltX * 50;
+  const centerY = imageHeight / 2 + fixedTiltY * 50;
 
   const gradient = imageCtx.createRadialGradient(
     centerX,
@@ -1367,16 +1372,57 @@ function downloadPolaroid(e) {
     imageWidth / 1.5
   );
 
-  const hueShift = 30; // Fixed hue shift for download
+  const hueShift = (Math.abs(fixedTiltX) + Math.abs(fixedTiltY)) * 50;
   gradient.addColorStop(0, `hsla(${hueShift}, 80%, 70%, 0.4)`);
   gradient.addColorStop(0.3, `hsla(${hueShift + 60}, 80%, 70%, 0.3)`);
   gradient.addColorStop(0.6, `hsla(${hueShift + 120}, 80%, 70%, 0.3)`);
   gradient.addColorStop(1, `hsla(${hueShift + 180}, 80%, 70%, 0.2)`);
 
   imageCtx.fillStyle = gradient;
-  imageCtx.globalCompositeOperation = "soft-light";
   imageCtx.fillRect(0, 0, imageWidth, imageHeight);
-  imageCtx.globalCompositeOperation = "source-over";
+
+  // Add noise texture
+  const downloadNoiseTexture = createNoiseTexture(imageWidth, imageHeight);
+  imageCtx.globalAlpha = 0.1;
+  imageCtx.drawImage(downloadNoiseTexture, 0, 0);
+  imageCtx.globalAlpha = 1;
+
+  // Add holographic sheen
+  const sheenIntensity = Math.min(
+    Math.abs(fixedTiltX) + Math.abs(fixedTiltY),
+    1
+  );
+  imageCtx.globalAlpha = 0.3 * sheenIntensity;
+  const sheenGradient = imageCtx.createLinearGradient(
+    imageWidth * (0.5 + fixedTiltX),
+    imageHeight * (0.5 + fixedTiltY),
+    imageWidth * (0.5 - fixedTiltX),
+    imageHeight * (0.5 - fixedTiltY)
+  );
+  sheenGradient.addColorStop(0, "rgba(0, 255, 255, 0)");
+  sheenGradient.addColorStop(0.5, "rgba(255, 0, 255, 0.5)");
+  sheenGradient.addColorStop(1, "rgba(255, 255, 0, 0)");
+  imageCtx.fillStyle = sheenGradient;
+  imageCtx.fillRect(0, 0, imageWidth, imageHeight);
+  imageCtx.globalAlpha = 1;
+
+  // Add a sparkle for extra effect
+  const sparkleX = centerX + (Math.random() - 0.5) * 30;
+  const sparkleY = centerY + (Math.random() - 0.5) * 30;
+  const sparkleGradient = imageCtx.createRadialGradient(
+    sparkleX,
+    sparkleY,
+    0,
+    sparkleX,
+    sparkleY,
+    10
+  );
+  sparkleGradient.addColorStop(0, "rgba(255, 255, 255, 0.8)");
+  sparkleGradient.addColorStop(1, "rgba(255, 255, 255, 0)");
+  imageCtx.fillStyle = sparkleGradient;
+  imageCtx.beginPath();
+  imageCtx.arc(sparkleX, sparkleY, 10, 0, Math.PI * 2);
+  imageCtx.fill();
 
   // Draw the filtered and effect-applied image to the final canvas
   tempCtx.drawImage(imageCanvas, fixedPaddingSide, fixedPaddingTop);
