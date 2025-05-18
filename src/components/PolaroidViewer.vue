@@ -44,13 +44,19 @@
       </div>
     </div>
 
-    <!-- Filter controls - appears when image is loaded -->
-    <div v-if="hasImage" class="filter-controls">
+    <!-- Filter controls - always present but conditionally visible -->
+    <div class="filter-controls">
       <!-- Top row for all buttons -->
-      <div class="filter-controls-top-row">
+      <div
+        class="filter-controls-top-row"
+        :style="{
+          opacity: hasImage ? 1 : 0,
+          visibility: hasImage ? 'visible' : 'hidden',
+        }"
+      >
         <!-- Permission button for device orientation -->
         <button
-          v-if="!orientationPermissionGranted && needsPermissionRequest"
+          v-show="!orientationPermissionGranted && needsPermissionRequest"
           @click="requestOrientationPermission"
           class="action-button"
         >
@@ -81,7 +87,13 @@
       </div>
 
       <!-- Horizontal scrollable filter selector -->
-      <div v-if="filtersEnabled" class="filter-selector">
+      <div
+        class="filter-selector"
+        :style="{
+          opacity: hasImage && filtersEnabled ? 1 : 0,
+          visibility: hasImage && filtersEnabled ? 'visible' : 'hidden',
+        }"
+      >
         <div class="filter-options-container">
           <div class="filter-options">
             <button
@@ -96,17 +108,25 @@
           </div>
         </div>
 
-        <!-- Filter intensity slider for applicable filters -->
-        <div v-show="showFilterIntensity" class="filter-intensity">
-          <label for="intensity-slider">Intensity:</label>
-          <input
-            type="range"
-            id="intensity-slider"
-            min="1"
-            max="100"
-            v-model="filterIntensity"
-            @input="handleIntensityChange"
-          />
+        <!-- Filter intensity slider container - always present but conditionally visible -->
+        <div class="filter-intensity-container">
+          <div
+            :style="{
+              opacity: showFilterIntensity ? 1 : 0,
+              visibility: showFilterIntensity ? 'visible' : 'hidden',
+            }"
+            class="filter-intensity"
+          >
+            <label for="intensity-slider">Intensity:</label>
+            <input
+              type="range"
+              id="intensity-slider"
+              min="1"
+              max="100"
+              v-model="filterIntensity"
+              @input="handleIntensityChange"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -1674,6 +1694,7 @@ body::before {
   margin-bottom: 10px;
   width: 100%;
   max-width: var(--polaroid-width);
+  min-height: 134px; /* Increased to account for all possible content */
 }
 
 /* Top row for all buttons */
@@ -1683,6 +1704,8 @@ body::before {
   gap: 10px;
   margin-bottom: 10px;
   width: 100%;
+  min-height: 44px; /* Minimum height to prevent layout shift */
+  transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
 /* Common button style for all action buttons */
@@ -1721,6 +1744,8 @@ body::before {
   flex-direction: column;
   align-items: center;
   width: 100%;
+  min-height: 80px; /* Height for filter options + intensity slider */
+  transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
 .filter-options-container {
@@ -1771,13 +1796,20 @@ body::before {
   font-weight: bold;
 }
 
-/* Filter intensity slider */
+/* Filter intensity slider container and slider */
+.filter-intensity-container {
+  width: 100%;
+  min-height: 30px; /* Reserve space for the intensity slider */
+}
+
 .filter-intensity {
   display: flex;
   align-items: center;
   width: 100%;
   max-width: 300px;
   padding: 0 10px;
+  margin: 0 auto;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
 .filter-intensity label {
@@ -1819,13 +1851,6 @@ body::before {
 
 /* Responsive adjustments */
 @media (max-width: 600px) {
-  .permission-button {
-    bottom: 10px;
-    right: 10px;
-    font-size: 0.9rem;
-    padding: 8px 16px;
-  }
-
   .filter-intensity {
     max-width: 90%;
   }
