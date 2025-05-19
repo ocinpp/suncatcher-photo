@@ -1438,7 +1438,7 @@ body::before {
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  filter: grayscale(100%) blur(0.5rem);
+  filter: grayscale(100%) blur(0.2rem) brightness(50%);
   z-index: -1; /* Same z-index as body::before */
   transition: background-image 0.3s;
   pointer-events: none;
