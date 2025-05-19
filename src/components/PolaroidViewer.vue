@@ -1720,7 +1720,7 @@ body::before {
   background-color: rgba(0, 0, 0, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 20px;
-  padding: 6px 12px;
+  padding: 8px 15px;
   font-family: "Inter", sans-serif;
   font-size: clamp(0.8rem, calc(0.9rem * var(--scale-ratio)), 1rem);
   color: white;
