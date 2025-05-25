@@ -1167,6 +1167,7 @@ function drawImage() {
   }
 
   // Apply special effects after the filter
+  drawHologramEffect();
   applySunCatcherEffect();
 }
 
@@ -1379,6 +1380,81 @@ function downloadPolaroid(e) {
     console.error("Error creating download:", err);
     alert("Could not download the image. Please try again.");
   }
+}
+
+// Add to existing code before drawImage
+function drawHologramEffect() {
+  ctx.save();
+  const tiltIntensity = Math.min(Math.abs(tiltX) + Math.abs(tiltY), 1);
+  const tiltAngle = Math.atan2(tiltY, tiltX); // Gradient angle from tilt
+  const diagonal =
+    Math.sqrt(
+      canvas.value.width * canvas.value.width +
+        canvas.value.height * canvas.value.height
+    ) * 2; // Oversized for full coverage
+
+  // Iridescent gradient (oversized, absolute coordinates)
+  const gradX1 = canvas.value.width / 2 - Math.cos(tiltAngle) * diagonal;
+  const gradY1 = canvas.value.height / 2 - Math.sin(tiltAngle) * diagonal;
+  const gradX2 = canvas.value.width / 2 + Math.cos(tiltAngle) * diagonal;
+  const gradY2 = canvas.value.height / 2 + Math.sin(tiltAngle) * diagonal;
+  const gradient = ctx.createLinearGradient(gradX1, gradY1, gradX2, gradY2);
+  gradient.addColorStop(0, `hsla(200, 50%, 50%, ${0.25 * tiltIntensity})`); // Blue
+  gradient.addColorStop(0.25, `hsla(160, 50%, 50%, ${0.25 * tiltIntensity})`); // Green
+  gradient.addColorStop(0.5, `hsla(0, 0%, 70%, ${0.25 * tiltIntensity})`); // Silver
+  gradient.addColorStop(0.75, `hsla(40, 50%, 60%, ${0.25 * tiltIntensity})`); // Gold
+  gradient.addColorStop(1, `hsla(200, 50%, 50%, ${0.25 * tiltIntensity})`); // Blue
+  ctx.globalCompositeOperation = "source-over"; // Consistent blending
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.value.width, canvas.value.height); // Full canvas rect
+
+  // Glossy highlight (full-width, softer)
+  const highlightX1 =
+    canvas.value.width / 2 - Math.cos(tiltAngle + Math.PI / 4) * diagonal;
+  const highlightY1 =
+    canvas.value.height / 2 - Math.sin(tiltAngle + Math.PI / 4) * diagonal;
+  const highlightX2 =
+    canvas.value.width / 2 + Math.cos(tiltAngle + Math.PI / 4) * diagonal;
+  const highlightY2 =
+    canvas.value.height / 2 + Math.sin(tiltAngle + Math.PI / 4) * diagonal;
+  const highlightGradient = ctx.createLinearGradient(
+    highlightX1,
+    highlightY1,
+    highlightX2,
+    highlightY2
+  );
+  highlightGradient.addColorStop(0, `hsla(0, 0%, 100%, 0)`);
+  highlightGradient.addColorStop(
+    0.3,
+    `hsla(0, 0%, 100%, ${0.25 * tiltIntensity})`
+  );
+  highlightGradient.addColorStop(
+    0.7,
+    `hsla(0, 0%, 100%, ${0.25 * tiltIntensity})`
+  );
+  highlightGradient.addColorStop(1, `hsla(0, 0%, 100%, 0)`);
+  ctx.globalCompositeOperation = "source-over";
+  ctx.fillStyle = highlightGradient;
+  ctx.fillRect(0, 0, canvas.value.width, canvas.value.height); // Full canvas rect
+
+  // Micro-texture (diagonal lines, oversized)
+  ctx.save();
+  ctx.globalAlpha = 0.15 * tiltIntensity;
+  ctx.translate(canvas.value.width / 2, canvas.value.height / 2);
+  ctx.rotate(Math.PI / 4); // Fixed angle for diffraction lines
+  for (let i = -diagonal; i < diagonal; i += 5) {
+    ctx.beginPath();
+    ctx.moveTo(i, -diagonal);
+    ctx.lineTo(i, diagonal);
+    ctx.strokeStyle = `hsla(0, 0%, 100%, 0.2)`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = 1;
+  ctx.restore();
 }
 </script>
 
