@@ -1176,7 +1176,7 @@ function drawHolographicSheen() {
 
   ctx.save();
   const tiltIntensity = Math.min(Math.abs(tiltX) + Math.abs(tiltY), 1);
-  ctx.globalAlpha = 0.3 * tiltIntensity;
+  ctx.globalAlpha = 0.2 * tiltIntensity;
   const gradient = ctx.createLinearGradient(
     canvas.value.width * (0.5 + tiltX),
     canvas.value.height * (0.5 + tiltY),
@@ -1384,6 +1384,8 @@ function downloadPolaroid(e) {
 
 // Add to existing code before drawImage
 function drawHologramEffect() {
+  if (!ctx || !canvas.value) return;
+
   ctx.save();
   const tiltIntensity = Math.min(Math.abs(tiltX) + Math.abs(tiltY), 1);
   const tiltAngle = Math.atan2(tiltY, tiltX); // Gradient angle from tilt
@@ -1399,11 +1401,11 @@ function drawHologramEffect() {
   const gradX2 = canvas.value.width / 2 + Math.cos(tiltAngle) * diagonal;
   const gradY2 = canvas.value.height / 2 + Math.sin(tiltAngle) * diagonal;
   const gradient = ctx.createLinearGradient(gradX1, gradY1, gradX2, gradY2);
-  gradient.addColorStop(0, `hsla(200, 50%, 50%, ${0.25 * tiltIntensity})`); // Blue
-  gradient.addColorStop(0.25, `hsla(160, 50%, 50%, ${0.25 * tiltIntensity})`); // Green
-  gradient.addColorStop(0.5, `hsla(0, 0%, 70%, ${0.25 * tiltIntensity})`); // Silver
-  gradient.addColorStop(0.75, `hsla(40, 50%, 60%, ${0.25 * tiltIntensity})`); // Gold
-  gradient.addColorStop(1, `hsla(200, 50%, 50%, ${0.25 * tiltIntensity})`); // Blue
+  gradient.addColorStop(0, `hsla(200, 50%, 50%, ${0.5 * tiltIntensity})`); // Blue
+  gradient.addColorStop(0.25, `hsla(160, 50%, 50%, ${0.5 * tiltIntensity})`); // Green
+  gradient.addColorStop(0.5, `hsla(0, 0%, 70%, ${0.5 * tiltIntensity})`); // Silver
+  gradient.addColorStop(0.75, `hsla(40, 50%, 60%, ${0.5 * tiltIntensity})`); // Gold
+  gradient.addColorStop(1, `hsla(200, 50%, 50%, ${0.5 * tiltIntensity})`); // Blue
   ctx.globalCompositeOperation = "source-over"; // Consistent blending
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, canvas.value.width, canvas.value.height); // Full canvas rect
@@ -1426,16 +1428,29 @@ function drawHologramEffect() {
   highlightGradient.addColorStop(0, `hsla(0, 0%, 100%, 0)`);
   highlightGradient.addColorStop(
     0.3,
-    `hsla(0, 0%, 100%, ${0.25 * tiltIntensity})`
+    `hsla(0, 0%, 100%, ${0.1 * tiltIntensity})`
   );
   highlightGradient.addColorStop(
     0.7,
-    `hsla(0, 0%, 100%, ${0.25 * tiltIntensity})`
+    `hsla(0, 0%, 100%, ${0.1 * tiltIntensity})`
   );
   highlightGradient.addColorStop(1, `hsla(0, 0%, 100%, 0)`);
   ctx.globalCompositeOperation = "source-over";
   ctx.fillStyle = highlightGradient;
   ctx.fillRect(0, 0, canvas.value.width, canvas.value.height); // Full canvas rect
+
+  ctx.restore();
+}
+
+function addDiffractionLines() {
+  if (!ctx || !canvas.value) return;
+
+  const tiltIntensity = Math.min(Math.abs(tiltX) + Math.abs(tiltY), 1);
+  const diagonal =
+    Math.sqrt(
+      canvas.value.width * canvas.value.width +
+        canvas.value.height * canvas.value.height
+    ) * 2; // Oversized for full coverage
 
   // Micro-texture (diagonal lines, oversized)
   ctx.save();
@@ -1450,7 +1465,6 @@ function drawHologramEffect() {
     ctx.lineWidth = 1;
     ctx.stroke();
   }
-  ctx.restore();
 
   ctx.globalCompositeOperation = "source-over";
   ctx.globalAlpha = 1;
