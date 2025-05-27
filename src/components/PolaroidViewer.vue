@@ -45,7 +45,10 @@
             @input="adjustTextareaHeight"
             ref="messageInput"
             @click.stop
-            :style="{ color: currentColour.colour2 }"
+            :style="{
+              '--placeholderTextColor': currentColour.colour3,
+              color: currentColour.colour2,
+            }"
           ></textarea>
         </div>
       </div>
@@ -177,14 +180,62 @@ import { ref, onMounted, onUnmounted, watch, nextTick, computed } from "vue";
 
 // Available colours for the polaroid
 const availableColours = [
-  { id: "original", name: "Original", colour1: "white", colour2: "black" },
-  { id: "red", name: "Red", colour1: "red", colour2: "white" },
-  { id: "orange", name: "Orange", colour1: "orange", colour2: "blue" },
-  { id: "yellow", name: "Yellow", colour1: "yellow", colour2: "violet" },
-  { id: "green", name: "Green", colour1: "green", colour2: "orange" },
-  { id: "blue", name: "Blue", colour1: "blue", colour2: "yellow" },
-  { id: "indigo", name: "Indigo", colour1: "indigo", colour2: "white" },
-  { id: "violet", name: "Violet", colour1: "violet", colour2: "indigo" },
+  {
+    id: "original",
+    name: "Original",
+    colour1: "white",
+    colour2: "black",
+    colour3: "#aaa",
+  },
+  {
+    id: "red",
+    name: "Red",
+    colour1: "red",
+    colour2: "white",
+    colour3: "white",
+  },
+  {
+    id: "orange",
+    name: "Orange",
+    colour1: "orange",
+    colour2: "blue",
+    colour3: "blue",
+  },
+  {
+    id: "yellow",
+    name: "Yellow",
+    colour1: "yellow",
+    colour2: "violet",
+    colour3: "violet",
+  },
+  {
+    id: "green",
+    name: "Green",
+    colour1: "green",
+    colour2: "orange",
+    colour3: "orange",
+  },
+  {
+    id: "blue",
+    name: "Blue",
+    colour1: "blue",
+    colour2: "yellow",
+    colour3: "yellow",
+  },
+  {
+    id: "indigo",
+    name: "Indigo",
+    colour1: "indigo",
+    colour2: "white",
+    colour3: "white",
+  },
+  {
+    id: "violet",
+    name: "Violet",
+    colour1: "violet",
+    colour2: "indigo",
+    colour3: "indigo",
+  },
 ];
 
 // Reactive state
@@ -1536,6 +1587,7 @@ function addDiffractionLines() {
   --download-button-width: 180px;
   --bg-image: url("/bg.jpeg");
   --scale-ratio: 1;
+  --placeholderTextColor: "#aaaaaa";
 }
 
 body {
@@ -1671,7 +1723,7 @@ body::before {
   position: relative;
   left: 0;
   width: 100%;
-  margin: 0;
+  margin-top: 1.2rem;
   background: linear-gradient(to right, red, orange, yellow, green, violet);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -1767,7 +1819,7 @@ body::before {
 }
 
 .message-input::placeholder {
-  color: #aaa;
+  color: var(--placeholderTextColor);
 }
 
 /* Filter controls */
