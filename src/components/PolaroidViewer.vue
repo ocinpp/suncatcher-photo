@@ -1,7 +1,14 @@
 <template>
   <div class="container">
+    <div class="polaroid-text">Create your sunshine photo</div>
+
     <div class="polaroid-wrapper">
-      <div class="polaroid" ref="polaroid" @click="triggerFileInput">
+      <div
+        class="polaroid"
+        ref="polaroid"
+        @click="triggerFileInput"
+        :style="{ backgroundColor: currentColour.colour1 }"
+      >
         <div class="image-container">
           <!-- Skeleton loader that shows while image is loading -->
           <div class="skeleton-loader" v-if="isLoading"></div>
@@ -11,7 +18,6 @@
             :class="{ 'image-loaded': hasImage }"
           ></canvas>
         </div>
-        <div class="polaroid-text">Create your sunshine photo</div>
 
         <!-- Custom file input with message and icon -->
         <div
@@ -39,6 +45,7 @@
             @input="adjustTextareaHeight"
             ref="messageInput"
             @click.stop
+            :style="{ color: currentColour.colour2 }"
           ></textarea>
         </div>
       </div>
@@ -46,6 +53,32 @@
 
     <!-- Filter controls - always present but conditionally visible -->
     <div class="filter-controls">
+      <!-- Horizontal scrollable colour selector -->
+      <div
+        class="colour-options-container"
+        :style="{
+          opacity: hasImage ? 1 : 0,
+          visibility: hasImage ? 'visible' : 'hidden',
+        }"
+      >
+        <div class="colour-options">
+          <button
+            v-for="colour in availableColours"
+            :key="colour.id"
+            @click.stop="selectColour(colour)"
+            :class="{
+              active: currentColour.id === colour.id,
+            }"
+            :style="{
+              backgroundColor: colour.colour1,
+            }"
+            class="colour-button"
+          >
+            &nbsp;
+          </button>
+        </div>
+      </div>
+
       <!-- Top row for all buttons -->
       <div
         class="filter-controls-top-row"
@@ -142,6 +175,18 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch, nextTick, computed } from "vue";
 
+// Available colours for the polaroid
+const availableColours = [
+  { id: "original", name: "Original", colour1: "white", colour2: "black" },
+  { id: "red", name: "Red", colour1: "red", colour2: "white" },
+  { id: "orange", name: "Orange", colour1: "orange", colour2: "blue" },
+  { id: "yellow", name: "Yellow", colour1: "yellow", colour2: "violet" },
+  { id: "green", name: "Green", colour1: "green", colour2: "orange" },
+  { id: "blue", name: "Blue", colour1: "blue", colour2: "yellow" },
+  { id: "indigo", name: "Indigo", colour1: "indigo", colour2: "white" },
+  { id: "violet", name: "Violet", colour1: "violet", colour2: "indigo" },
+];
+
 // Reactive state
 const polaroid = ref(null);
 const canvas = ref(null);
@@ -156,8 +201,9 @@ const needsPermissionRequest = ref(false);
 const currentFilter = ref("none"); // Default filter is none
 const filterIntensity = ref(50); // Default intensity (1-100)
 const filtersEnabled = ref(true); // New state for filter toggle
+const currentColour = ref(availableColours[0]); // Default colour is the first one
 let backgroundCanvas = null;
-let originalImageData = null; // Store original image data for filters
+// let originalImageData = null; // Store original image data for filters
 let processingCanvas = null; // For complex filter processing
 
 // Canvas and effect variables
@@ -393,6 +439,11 @@ function selectFilter(filterId) {
   if (intensityFilters.includes(filterId)) {
     filterIntensity.value = 50;
   }
+}
+
+// Select a colour
+function selectColour(colour) {
+  currentColour.value = colour;
 }
 
 // Functions
@@ -1315,7 +1366,7 @@ function downloadPolaroid(e) {
   const tempCtx = tempCanvas.getContext("2d", { willReadFrequently: true });
 
   // Draw white background for the entire polaroid
-  tempCtx.fillStyle = "white";
+  tempCtx.fillStyle = currentColour.value.colour1 || "white";
   tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
 
   // Draw directly from the original canvas which already has all filters and effects applied
@@ -1333,7 +1384,7 @@ function downloadPolaroid(e) {
     const fontSize = 19.2; // Fixed font size for 500px width
 
     tempCtx.font = `200 ${fontSize}px Inter, sans-serif`;
-    tempCtx.fillStyle = "black";
+    tempCtx.fillStyle = currentColour.value.colour2 || "black";
     tempCtx.textAlign = "left";
 
     // Position text in the bottom white area - always at the same position
@@ -1617,8 +1668,7 @@ body::before {
   text-align: left;
   text-transform: uppercase;
   letter-spacing: -0.3px;
-  position: absolute;
-  top: calc(-42px * var(--scale-ratio)); /* Position above Polaroid */
+  position: relative;
   left: 0;
   width: 100%;
   margin: 0;
@@ -1725,7 +1775,6 @@ body::before {
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-top: 10px;
   margin-bottom: 10px;
   width: 100%;
   max-width: var(--polaroid-width);
@@ -1887,6 +1936,55 @@ body::before {
 .button-icon {
   margin-right: 8px;
   font-size: clamp(0.9rem, calc(1.2rem * var(--scale-ratio)), 1.4rem);
+}
+
+.colour-options-container {
+  width: 100%;
+  max-width: var(--polaroid-width);
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+  margin-bottom: 10px;
+}
+
+.colour-options-container::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+.colour-options {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  padding: 2px;
+  min-width: min-content;
+  justify-content: space-between;
+}
+
+.colour-button {
+  background-color: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  /* border-radius: 20px; */
+  padding: 8px 15px;
+  font-family: "Inter", sans-serif;
+  font-size: clamp(0.8rem, calc(0.9rem * var(--scale-ratio)), 1rem);
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.colour-button:hover {
+  background-color: rgba(0, 0, 0, 0.8);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.colour-button.active {
+  background-color: rgba(0, 0, 0, 0.9);
+  border-color: rgba(255, 255, 255, 0.7);
+  font-weight: bold;
 }
 
 /* Responsive adjustments */
