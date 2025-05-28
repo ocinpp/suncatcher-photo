@@ -1595,7 +1595,7 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100dvh;
+  max-height: 100dvh;
   margin: 0;
   background-color: #000000;
   position: relative;
@@ -1643,11 +1643,12 @@ body::before {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  height: 100dvh;
+  max-height: 100dvh;
   width: 100%;
   max-width: 100vw;
-  padding: 20px;
   box-sizing: border-box;
-  gap: 20px;
+  gap: 8px;
   position: relative;
   z-index: 1;
 }
@@ -1716,14 +1717,14 @@ body::before {
 .polaroid-text {
   font-family: "Inter", sans-serif;
   font-weight: 200;
-  font-size: clamp(1.2rem, calc(1.6rem * var(--scale-ratio)), 1.8rem);
+  font-size: clamp(1.1rem, calc(1.2rem * var(--scale-ratio)), 1.4rem);
   text-align: left;
   text-transform: uppercase;
   letter-spacing: -0.3px;
   position: relative;
   left: 0;
   width: 100%;
-  margin-top: 1.2rem;
+  padding-top: 1.5rem;
   background: linear-gradient(to right, red, orange, yellow, green, violet);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -1827,10 +1828,10 @@ body::before {
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   width: 100%;
   max-width: var(--polaroid-width);
-  min-height: 134px; /* Increased to account for all possible content */
+  min-height: 190px; /* Increased to account for all possible content */
 }
 
 /* Top row for all buttons */
@@ -1838,9 +1839,9 @@ body::before {
   display: flex;
   justify-content: center;
   gap: 10px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   width: 100%;
-  min-height: 44px; /* Minimum height to prevent layout shift */
+  min-height: 36px; /* Minimum height to prevent layout shift */
   transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
@@ -1851,7 +1852,7 @@ body::before {
   border-radius: 25px;
   padding: 8px 16px;
   font-family: "Inter", sans-serif;
-  font-size: clamp(0.9rem, calc(1rem * var(--scale-ratio)), 1.2rem);
+  font-size: clamp(0.8rem, calc(0.9rem * var(--scale-ratio)), 1rem);
   color: white;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -1888,7 +1889,6 @@ body::before {
   width: 100%;
   max-width: var(--polaroid-width);
   overflow-x: auto;
-  overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE and Edge */
@@ -1903,7 +1903,7 @@ body::before {
   display: flex;
   flex-wrap: nowrap;
   gap: 8px;
-  padding: 4px;
+  padding: 4px 0;
   min-width: min-content;
 }
 
@@ -1992,13 +1992,11 @@ body::before {
 
 .colour-options-container {
   width: 100%;
-  max-width: var(--polaroid-width);
   overflow-x: auto;
-  overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE and Edge */
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .colour-options-container::-webkit-scrollbar {
@@ -2009,7 +2007,7 @@ body::before {
   display: flex;
   flex-wrap: nowrap;
   gap: 8px;
-  padding: 2px;
+  padding: 2px 0;
   min-width: min-content;
   justify-content: space-between;
 }
