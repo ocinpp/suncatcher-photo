@@ -1297,11 +1297,11 @@ function drawImage() {
     applyFilter(ctx, currentFilter.value, canvasWidth, canvasHeight);
   }
 
-  // drawLightLeakEffect(); // New: Light leak effect
-  drawExpiredFilmEffect(); // New: Expired film effect
+  // drawLightLeakEffect();
+  drawExpiredFilmEffect();
 
   // Apply special effects after the filter
-  drawHologramEffect();
+  // drawHologramEffect();
   applySunCatcherEffect();
 }
 
