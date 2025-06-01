@@ -15,8 +15,26 @@
           <canvas
             ref="canvas"
             class="canvas"
-            :class="{ 'image-loaded': hasImage }"
+            :class="{ 'image-loaded': hasImage, draggable: hasImage }"
+            @mousedown="startDrag"
+            @mousemove="onDrag"
+            @mouseup="endDrag"
+            @mouseleave="endDrag"
+            @touchstart="startDrag"
+            @touchmove="onDrag"
+            @touchend="endDrag"
           ></canvas>
+        </div>
+
+        <div
+          class="drag-hint"
+          v-if="hasImage"
+          :style="{
+            opacity: hasImage ? 1 : 0,
+            visibility: hasImage ? 'visible' : 'hidden',
+          }"
+        >
+          <span class="hint-text">Drag to position image</span>
         </div>
 
         <!-- Custom file input with message and icon -->
@@ -256,6 +274,14 @@ const currentColour = ref(availableColours[0]); // Default colour is the first o
 let backgroundCanvas = null;
 // let originalImageData = null; // Store original image data for filters
 let processingCanvas = null; // For complex filter processing
+
+// Add these reactive variables
+const isDragging = ref(false);
+const dragStartX = ref(0);
+const dragStartY = ref(0);
+const imageOffsetX = ref(0);
+const imageOffsetY = ref(0);
+const wasDragging = ref(false);
 
 // Canvas and effect variables
 let ctx = null;
@@ -585,10 +611,19 @@ function triggerFileInput(e) {
   // Prevent default if it's a button click
   if (e) e.preventDefault();
 
+  // Don't trigger file input if we just finished dragging
+  if (wasDragging.value) {
+    return;
+  }
+
   // Only trigger file input if we're not clicking in the message area
   if (e && e.target === messageInput.value) return;
 
-  imageInput.value.click();
+  // Reset the file input to ensure onChange fires even with the same file
+  if (imageInput.value) {
+    imageInput.value.value = "";
+    imageInput.value.click();
+  }
 }
 
 function handleImageUpload(e) {
@@ -620,6 +655,11 @@ function handleImageUpload(e) {
         hasImage.value = true;
         currentImageSrc.value = image.src; // Update reactive source
         isLoading.value = false;
+
+        // Reset drag offsets when loading a new image
+        imageOffsetX.value = 0;
+        imageOffsetY.value = 0;
+
         drawImage();
       };
       image.onerror = () => {
@@ -1289,8 +1329,29 @@ function drawImage() {
     offsetY = (canvasHeight - drawHeight) / 2;
   }
 
-  // Draw the original image
-  ctx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
+  // Apply user drag offset (with limits to prevent dragging image completely out of view)
+  const maxOffsetX = Math.max(0, (drawWidth - canvasWidth) / 2);
+  const maxOffsetY = Math.max(0, (drawHeight - canvasHeight) / 2);
+
+  // Use a smoother constraint that allows some movement but ensures the image stays visible
+  // The division factor (2) controls how much of the image must remain visible
+  const constrainedOffsetX = Math.max(
+    -maxOffsetX,
+    Math.min(maxOffsetX, imageOffsetX.value / 2)
+  );
+  const constrainedOffsetY = Math.max(
+    -maxOffsetY,
+    Math.min(maxOffsetY, imageOffsetY.value / 2)
+  );
+
+  // Draw the original image with the user's position offset
+  ctx.drawImage(
+    image,
+    offsetX - constrainedOffsetX,
+    offsetY - constrainedOffsetY,
+    drawWidth,
+    drawHeight
+  );
 
   // Apply selected filter if filters are enabled
   if (filtersEnabled.value) {
@@ -1889,6 +1950,95 @@ function drawExpiredFilmEffect() {
   ctx.globalAlpha = 1;
   ctx.restore();
 }
+
+// Add these functions for drag functionality
+function startDrag(e) {
+  // Only allow dragging if we have an image
+  if (!hasImage.value) {
+    return;
+  }
+
+  // Prevent default behavior to avoid scrolling on mobile
+  e.preventDefault();
+
+  // Get the correct event (touch or mouse)
+  const event = e.touches ? e.touches[0] : e;
+
+  // Set dragging state
+  isDragging.value = true;
+  wasDragging.value = false; // Reset the was-dragging flag
+  dragStartX.value = event.clientX - imageOffsetX.value;
+  dragStartY.value = event.clientY - imageOffsetY.value;
+}
+
+function onDrag(e) {
+  if (!isDragging.value) return;
+
+  // Prevent default to stop scrolling on mobile
+  e.preventDefault();
+
+  // Get the correct event (touch or mouse)
+  const event = e.touches ? e.touches[0] : e;
+
+  // Calculate new offset
+  const newOffsetX = event.clientX - dragStartX.value;
+  const newOffsetY = event.clientY - dragStartY.value;
+
+  // Check if we've moved enough to consider it a drag
+  const dragDistance = Math.sqrt(
+    Math.pow(newOffsetX - imageOffsetX.value, 2) +
+      Math.pow(newOffsetY - imageOffsetY.value, 2)
+  );
+
+  if (dragDistance > 5) {
+    wasDragging.value = true;
+  }
+
+  // Calculate canvas dimensions
+  const canvasWidth = canvas.value.width;
+  const canvasHeight = canvas.value.height;
+
+  // Calculate image dimensions
+  const imgWidth = image.width;
+  const imgHeight = image.height;
+
+  // Calculate the aspect ratios
+  const imgRatio = imgWidth / imgHeight;
+  const canvasRatio = canvasWidth / canvasHeight;
+
+  // Calculate the drawn dimensions
+  let drawWidth, drawHeight;
+  if (imgRatio > canvasRatio) {
+    // Image is wider than canvas (relative to height)
+    drawHeight = canvasHeight;
+    drawWidth = drawHeight * imgRatio;
+  } else {
+    // Image is taller than canvas (relative to width)
+    drawWidth = canvasWidth;
+    drawHeight = drawWidth / imgRatio;
+  }
+
+  // Calculate the maximum allowed offsets
+  const maxOffsetX = Math.max(0, (drawWidth - canvasWidth) / 2);
+  const maxOffsetY = Math.max(0, (drawHeight - canvasHeight) / 2);
+
+  // Constrain the offsets directly during drag
+  imageOffsetX.value = Math.max(
+    -maxOffsetX * 2,
+    Math.min(maxOffsetX * 2, newOffsetX)
+  );
+  imageOffsetY.value = Math.max(
+    -maxOffsetY * 2,
+    Math.min(maxOffsetY * 2, newOffsetY)
+  );
+
+  // Redraw the image with the new offset
+  drawImage();
+}
+
+function endDrag() {
+  isDragging.value = false;
+}
 </script>
 
 <style>
@@ -2007,6 +2157,13 @@ body::before {
   width: 100%;
   height: 100%;
   contain: strict;
+  cursor: move;
+  cursor: grab;
+  touch-action: none; /* Prevent browser handling of touch events */
+}
+
+.canvas.draggable:active {
+  cursor: grabbing;
 }
 
 /* Skeleton loader */
@@ -2365,6 +2522,33 @@ body::before {
   .filter-button {
     padding: 4px 8px;
     font-size: 0.7rem;
+  }
+}
+
+.drag-hint {
+  position: absolute;
+  bottom: 50%;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.6);
+  color: white;
+  padding: 5px 10px;
+  border-radius: 15px;
+  font-size: 12px;
+  pointer-events: none;
+  transition: opacity 0.3s;
+  z-index: 1000;
+  animation: fadeOut 3s forwards;
+  animation-delay: 3s;
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    visibility: hidden;
   }
 }
 </style>
