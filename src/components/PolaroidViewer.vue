@@ -15,7 +15,14 @@
           <canvas
             ref="canvas"
             class="canvas"
-            :class="{ 'image-loaded': hasImage }"
+            :class="{ 'image-loaded': hasImage, draggable: hasImage }"
+            @mousedown="startDrag"
+            @mousemove="onDrag"
+            @mouseup="endDrag"
+            @mouseleave="endDrag"
+            @touchstart="startDrag"
+            @touchmove="onDrag"
+            @touchend="endDrag"
           ></canvas>
         </div>
 
@@ -256,6 +263,13 @@ const currentColour = ref(availableColours[0]); // Default colour is the first o
 let backgroundCanvas = null;
 // let originalImageData = null; // Store original image data for filters
 let processingCanvas = null; // For complex filter processing
+
+// Add these reactive variables
+const isDragging = ref(false);
+const dragStartX = ref(0);
+const dragStartY = ref(0);
+const imageOffsetX = ref(0);
+const imageOffsetY = ref(0);
 
 // Canvas and effect variables
 let ctx = null;
@@ -1289,8 +1303,28 @@ function drawImage() {
     offsetY = (canvasHeight - drawHeight) / 2;
   }
 
-  // Draw the original image
-  ctx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
+  // Apply user drag offset (with limits to prevent dragging image completely out of view)
+  const maxOffsetX = Math.max(0, (drawWidth - canvasWidth) / 2);
+  const maxOffsetY = Math.max(0, (drawHeight - canvasHeight) / 2);
+
+  // Constrain the offset to keep at least 50% of the image visible
+  const constrainedOffsetX = Math.max(
+    -maxOffsetX,
+    Math.min(maxOffsetX, imageOffsetX.value / 2)
+  );
+  const constrainedOffsetY = Math.max(
+    -maxOffsetY,
+    Math.min(maxOffsetY, imageOffsetY.value / 2)
+  );
+
+  // Draw the original image with the user's position offset
+  ctx.drawImage(
+    image,
+    offsetX - constrainedOffsetX,
+    offsetY - constrainedOffsetY,
+    drawWidth,
+    drawHeight
+  );
 
   // Apply selected filter if filters are enabled
   if (filtersEnabled.value) {
@@ -1889,6 +1923,41 @@ function drawExpiredFilmEffect() {
   ctx.globalAlpha = 1;
   ctx.restore();
 }
+
+// Add these functions for drag functionality
+function startDrag(e) {
+  // Only allow dragging if we have an image
+  if (!hasImage.value) return;
+
+  // Prevent default behavior
+  e.preventDefault();
+
+  // Get the correct event (touch or mouse)
+  const event = e.touches ? e.touches[0] : e;
+
+  // Set dragging state
+  isDragging.value = true;
+  dragStartX.value = event.clientX - imageOffsetX.value;
+  dragStartY.value = event.clientY - imageOffsetY.value;
+}
+
+function onDrag(e) {
+  if (!isDragging.value) return;
+
+  // Get the correct event (touch or mouse)
+  const event = e.touches ? e.touches[0] : e;
+
+  // Calculate new offset
+  imageOffsetX.value = event.clientX - dragStartX.value;
+  imageOffsetY.value = event.clientY - dragStartY.value;
+
+  // Redraw the image with the new offset
+  drawImage();
+}
+
+function endDrag() {
+  isDragging.value = false;
+}
 </script>
 
 <style>
@@ -2007,6 +2076,12 @@ body::before {
   width: 100%;
   height: 100%;
   contain: strict;
+  cursor: move;
+  cursor: grab;
+}
+
+.canvas.draggable:active {
+  cursor: grabbing;
 }
 
 /* Skeleton loader */
