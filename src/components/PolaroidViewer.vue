@@ -261,6 +261,7 @@ let processingCanvas = null; // For complex filter processing
 let ctx = null;
 let image = new Image();
 let noiseTexture = null;
+let artifactTexture = null;
 let tiltX = 0,
   tiltY = 0,
   prevTiltX = 0,
@@ -574,6 +575,10 @@ function resizeCanvas() {
 
   // Recreate noise texture at new size
   noiseTexture = createNoiseTexture(canvas.value.width, canvas.value.height);
+  artifactTexture = createArtifactTexture(
+    canvas.value.width,
+    canvas.value.height
+  );
 }
 
 function triggerFileInput(e) {
@@ -723,6 +728,26 @@ function createNoiseTexture(width, height) {
   return noiseCanvas;
 }
 
+// Artifact texture (coarser for scratches, stains)
+function createArtifactTexture(width, height) {
+  const artifactTexture = document.createElement("canvas");
+  artifactTexture.width = 128;
+  artifactTexture.height = 128;
+  const artifactCtx = artifactTexture.getContext("2d", {
+    willReadFrequently: true,
+  });
+  const artifactData = artifactCtx.createImageData(128, 128);
+  for (let i = 0; i < artifactData.data.length; i += 4) {
+    const value = Math.random() < 0.05 ? 255 : 0; // Sparse noise
+    artifactData.data[i] = value;
+    artifactData.data[i + 1] = value;
+    artifactData.data[i + 2] = value;
+    artifactData.data[i + 3] = value ? 128 : 0; // Semi-transparent
+  }
+  artifactCtx.putImageData(artifactData, 0, 0);
+  return artifactTexture;
+}
+
 // Apply filter to the canvas
 function applyFilter(context, filterId, width, height) {
   // Skip filter application if filters are disabled
@@ -738,7 +763,9 @@ function applyFilter(context, filterId, width, height) {
   tempCtx.drawImage(context.canvas, 0, 0);
 
   // Get image data for pixel manipulation
-  const imageData = tempCtx.getImageData(0, 0, width, height);
+  const imageData = tempCtx.getImageData(0, 0, width, height, {
+    willReadFrequently: true,
+  });
   const data = imageData.data;
 
   // Get intensity value (1-100)
@@ -1053,7 +1080,9 @@ function applyFilter(context, filterId, width, height) {
       tempCtx.drawImage(tempCanvas, 0, 0);
 
       // Get the blurred image data
-      const blurredData = tempCtx.getImageData(0, 0, width, height).data;
+      const blurredData = tempCtx.getImageData(0, 0, width, height, {
+        willReadFrequently: true,
+      }).data;
 
       // Create a new array for the watercolor effect
       const watercolorData = new Uint8ClampedArray(data.length);
@@ -1267,6 +1296,9 @@ function drawImage() {
   if (filtersEnabled.value) {
     applyFilter(ctx, currentFilter.value, canvasWidth, canvasHeight);
   }
+
+  // drawLightLeakEffect(); // New: Light leak effect
+  drawExpiredFilmEffect(); // New: Expired film effect
 
   // Apply special effects after the filter
   drawHologramEffect();
@@ -1567,6 +1599,291 @@ function addDiffractionLines() {
     ctx.lineWidth = 1;
     ctx.stroke();
   }
+
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+// Revised Light Leak Effect
+function drawLightLeakEffect() {
+  if (!ctx || !canvas.value) return;
+
+  ctx.save();
+  const tiltIntensity = Math.min(Math.abs(tiltX) + Math.abs(tiltY), 1);
+
+  // Generate streaks once (cached)
+  if (!window.lightLeakCache) {
+    window.lightLeakCache = [];
+    const streakCount = 1 + Math.floor(Math.random() * 1); // 1–3 streaks
+    for (let i = 0; i < streakCount; i++) {
+      let x = Math.random() * canvas.value.width;
+      let y = Math.random() * canvas.value.height;
+      if (Math.random() < 0.3) {
+        // 30% edge bias
+        const edge = Math.floor(Math.random() * 4);
+        if (edge === 0) x = Math.random() * 30; // Left
+        else if (edge === 1)
+          x = canvas.value.width - Math.random() * 30; // Right
+        else if (edge === 2) y = Math.random() * 30; // Top
+        else y = canvas.value.height - Math.random() * 30; // Bottom
+      }
+      const length = 500 + Math.random() * 150; // 100–250px
+      const width = 500 + Math.random() * 60; // 20–80px
+      const angle = Math.random() * Math.PI * 2;
+      const colors = [
+        {
+          // Red → yellow → cyan
+          start: { hue: 0, sat: 90, light: 60 },
+          mid1: { hue: 60, sat: 95, light: 65 },
+          mid2: { hue: 180, sat: 90, light: 60 },
+        },
+        {
+          // Orange → cyan → magenta
+          start: { hue: 30, sat: 90, light: 60 },
+          mid1: { hue: 180, sat: 95, light: 65 },
+          mid2: { hue: 300, sat: 90, light: 60 },
+        },
+        {
+          // Blue → magenta → yellow
+          start: { hue: 200, sat: 90, light: 60 },
+          mid1: { hue: 300, sat: 95, light: 65 },
+          mid2: { hue: 60, sat: 90, light: 60 },
+        },
+      ];
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      window.lightLeakCache.push({ x, y, length, width, angle, color });
+    }
+  }
+
+  // Draw static streaks, intensity only
+  ctx.globalCompositeOperation = "screen";
+  window.lightLeakCache.forEach((streak) => {
+    const startX = streak.x;
+    const startY = streak.y;
+    const endX = streak.x + Math.cos(streak.angle) * streak.length;
+    const endY = streak.y + Math.sin(streak.angle) * streak.length;
+    const cpX = streak.x + Math.cos(streak.angle) * streak.length * 0.5;
+    const cpY = streak.y + Math.sin(streak.angle) * streak.length * 0.5;
+    const gradient = ctx.createLinearGradient(startX, startY, endX, endY);
+    gradient.addColorStop(
+      0,
+      `hsla(${streak.color.start.hue}, ${streak.color.start.sat}%, ${
+        streak.color.start.light
+      }%, ${0.4 * tiltIntensity})`
+    );
+    gradient.addColorStop(
+      0.33,
+      `hsla(${streak.color.mid1.hue}, ${streak.color.mid1.sat}%, ${
+        streak.color.mid1.light
+      }%, ${0.35 * tiltIntensity})`
+    );
+    gradient.addColorStop(
+      0.67,
+      `hsla(${streak.color.mid2.hue}, ${streak.color.mid2.sat}%, ${
+        streak.color.mid2.light
+      }%, ${0.3 * tiltIntensity})`
+    );
+    gradient.addColorStop(1, "hsla(0, 0%, 0%, 0)");
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.moveTo(startX, startY - streak.width / 2);
+    ctx.quadraticCurveTo(
+      cpX,
+      cpY - streak.width / 2,
+      endX,
+      endY - streak.width / 4
+    );
+    ctx.lineTo(endX, endY + streak.width / 4);
+    ctx.quadraticCurveTo(
+      cpX,
+      cpY + streak.width / 2,
+      startX,
+      startY + streak.width / 2
+    );
+    ctx.closePath();
+    ctx.fill();
+  });
+
+  ctx.globalCompositeOperation = "source-over";
+  ctx.restore();
+}
+
+// Revised Expired Film Effect
+function drawExpiredFilmEffect() {
+  if (!ctx || !canvas.value) return;
+
+  ctx.save();
+  const tiltIntensity = Math.min(Math.abs(tiltX) + Math.abs(tiltY), 1);
+
+  // Cache color patches
+  if (!window.patchCache) {
+    window.patchCache = document.createElement("canvas");
+    window.patchCache.width = 32;
+    window.patchCache.height = 32;
+    const patchCtx = window.patchCache.getContext("2d", {
+      willReadFrequently: true,
+    });
+    const colors = [
+      "hsla(180, 30%, 50%, 0.2)", // Cyan
+      "hsla(300, 30%, 50%, 0.2)", // Magenta
+      "hsla(60, 30%, 50%, 0.2)", // Yellow
+      "hsla(120, 30%, 50%, 0.15)", // Green
+    ];
+    for (let i = 0; i < 5; i++) {
+      const x = Math.random() * 32;
+      const y = Math.random() * 32;
+      const radius = 5 + Math.random() * 10;
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      const gradient = patchCtx.createRadialGradient(x, y, 0, x, y, radius);
+      gradient.addColorStop(0, color);
+      gradient.addColorStop(1, "hsla(0, 0%, 0%, 0)");
+      patchCtx.fillStyle = gradient;
+      patchCtx.beginPath();
+      patchCtx.arc(x, y, radius, 0, Math.PI * 2);
+      patchCtx.fill();
+    }
+  }
+
+  // Color shifts (intensity only)
+  ctx.globalCompositeOperation = "overlay";
+  ctx.globalAlpha = 0.2 * tiltIntensity;
+  ctx.drawImage(window.patchCache, 0, 0);
+  ctx.globalAlpha = 1;
+
+  // Static grain (intensity only)
+  ctx.globalAlpha = 0.15 * tiltIntensity;
+  ctx.drawImage(noiseTexture, 0, 0);
+  ctx.globalAlpha = 1;
+
+  // Irregular vignette (fixed, intensity only)
+  if (!window.vignetteCache) {
+    window.vignetteCache = [];
+    const segments = 24; // Smoother path
+    for (let i = 0; i <= segments; i++) {
+      const angle = (i / segments) * Math.PI * 2;
+      const radius =
+        (canvas.value.width / 2) * (0.85 + Math.sin(angle * 4) * 0.15); // Sine-based waviness
+      const x = canvas.value.width / 2 + Math.cos(angle) * radius;
+      const y = canvas.value.height / 2 + Math.sin(angle) * radius;
+      window.vignetteCache.push({ x, y });
+    }
+  }
+
+  ctx.beginPath();
+  ctx.moveTo(window.vignetteCache[0].x, window.vignetteCache[0].y);
+  for (let i = 1; i < window.vignetteCache.length - 1; i++) {
+    const cp1X = window.vignetteCache[i].x;
+    const cp1Y = window.vignetteCache[i].y;
+    const cp2X =
+      (window.vignetteCache[i].x + window.vignetteCache[i + 1].x) / 2;
+    const cp2Y =
+      (window.vignetteCache[i].y + window.vignetteCache[i + 1].y) / 2;
+    ctx.bezierCurveTo(cp1X, cp1Y, cp1X, cp1Y, cp2X, cp2Y);
+  }
+  ctx.closePath();
+  const vignetteGradient = ctx.createRadialGradient(
+    canvas.value.width / 2,
+    canvas.value.height / 2,
+    canvas.value.width / 3, // Softer edge
+    canvas.value.width / 2,
+    canvas.value.height / 2,
+    canvas.value.width
+  );
+  vignetteGradient.addColorStop(0, "hsla(30, 50%, 20%, 0)"); // Darker brown
+  vignetteGradient.addColorStop(
+    1,
+    `hsla(30, 50%, 20%, ${0.4 * tiltIntensity})`
+  );
+  ctx.globalCompositeOperation = "multiply";
+  ctx.fillStyle = vignetteGradient;
+  ctx.fillRect(0, 0, canvas.value.width, canvas.value.height); // Full canvas
+
+  // Fading
+  const tempCanvas = document.createElement("canvas");
+  tempCanvas.width = canvas.value.width;
+  tempCanvas.height = canvas.value.height;
+  const tempCtx = tempCanvas.getContext("2d", { willReadFrequently: true });
+  tempCtx.drawImage(canvas.value, 0, 0);
+  const fadeData = tempCtx.getImageData(
+    0,
+    0,
+    canvas.value.width,
+    canvas.value.height
+  );
+  const pixels = fadeData.data;
+  for (let i = 0; i < pixels.length; i += 4) {
+    pixels[i] = Math.min(255, pixels[i] + 20);
+    pixels[i + 1] = Math.min(255, pixels[i + 1] + 20);
+    pixels[i + 2] = Math.min(255, pixels[i + 2] + 20);
+    const luminance =
+      (pixels[i] * 0.299 + pixels[i + 1] * 0.587 + pixels[i + 2] * 0.114) / 255;
+    pixels[i] += (luminance * 255 - pixels[i]) * 0.3;
+    pixels[i + 1] += (luminance * 255 - pixels[i + 1]) * 0.3;
+    pixels[i + 2] += (luminance * 255 - pixels[i + 2]) * 0.3;
+  }
+  tempCtx.putImageData(fadeData, 0, 0);
+  ctx.drawImage(tempCanvas, 0, 0);
+
+  // Artifacts
+  ctx.globalAlpha = 0.1;
+  ctx.drawImage(artifactTexture, 0, 0);
+  for (let i = 0; i < 2; i++) {
+    const x1 = Math.random() * canvas.value.width;
+    const y1 = Math.random() * canvas.value.height;
+    const x2 = x1 + (Math.random() - 0.5) * 50;
+    const y2 = y1 + (Math.random() - 0.5) * 50;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.quadraticCurveTo(x1 + (x2 - x1) / 2, y1 + (y2 - y1) / 2, x2, y2);
+    ctx.strokeStyle = "hsla(0, 0%, 100%, 0.05)";
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+  }
+  for (let i = 0; i < 8; i++) {
+    const x = Math.random() * canvas.value.width;
+    const y = Math.random() * canvas.value.height;
+    ctx.beginPath();
+    ctx.arc(x, y, 1, 0, Math.PI * 2);
+    ctx.fillStyle = "hsla(0, 0%, 50%, 0.1)";
+    ctx.fill();
+  }
+  for (let i = 0; i < 1; i++) {
+    const x = Math.random() * canvas.value.width;
+    const y = Math.random() * canvas.value.height;
+    const gradient = ctx.createRadialGradient(x, y, 0, x, y, 20);
+    gradient.addColorStop(0, "hsla(60, 20%, 50%, 0.1)");
+    gradient.addColorStop(1, "hsla(0, 0%, 0%, 0)");
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(x, y, 20, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Creamy whites
+  tempCtx.clearRect(0, 0, canvas.value.width, canvas.value.height);
+  tempCtx.drawImage(canvas.value, 0, 0);
+  const whiteData = tempCtx.getImageData(
+    0,
+    0,
+    canvas.value.width,
+    canvas.value.height
+  );
+  const whitePixels = whiteData.data;
+  for (let i = 0; i < whitePixels.length; i += 4) {
+    const luminance =
+      (whitePixels[i] * 0.299 +
+        whitePixels[i + 1] * 0.587 +
+        whitePixels[i + 2] * 0.114) /
+      255;
+    if (luminance > 0.8) {
+      whitePixels[i] = whitePixels[i] * 0.95 + 20;
+      whitePixels[i + 1] = whitePixels[i + 1] * 0.95 + 15;
+      whitePixels[i + 2] = whitePixels[i + 2] * 0.95 + 10;
+    }
+  }
+  tempCtx.putImageData(whiteData, 0, 0);
+  ctx.drawImage(tempCanvas, 0, 0);
 
   ctx.globalCompositeOperation = "source-over";
   ctx.globalAlpha = 1;
