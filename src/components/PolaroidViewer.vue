@@ -1335,7 +1335,8 @@ function drawImage() {
   const maxOffsetX = Math.max(0, (drawWidth - canvasWidth) / 2);
   const maxOffsetY = Math.max(0, (drawHeight - canvasHeight) / 2);
 
-  // Constrain the offset to keep at least 50% of the image visible
+  // Use a smoother constraint that allows some movement but ensures the image stays visible
+  // The division factor (2) controls how much of the image must remain visible
   const constrainedOffsetX = Math.max(
     -maxOffsetX,
     Math.min(maxOffsetX, imageOffsetX.value / 2)
@@ -1993,9 +1994,43 @@ function onDrag(e) {
     wasDragging.value = true;
   }
 
-  // Update offsets
-  imageOffsetX.value = newOffsetX;
-  imageOffsetY.value = newOffsetY;
+  // Calculate canvas dimensions
+  const canvasWidth = canvas.value.width;
+  const canvasHeight = canvas.value.height;
+
+  // Calculate image dimensions
+  const imgWidth = image.width;
+  const imgHeight = image.height;
+
+  // Calculate the aspect ratios
+  const imgRatio = imgWidth / imgHeight;
+  const canvasRatio = canvasWidth / canvasHeight;
+
+  // Calculate the drawn dimensions
+  let drawWidth, drawHeight;
+  if (imgRatio > canvasRatio) {
+    // Image is wider than canvas (relative to height)
+    drawHeight = canvasHeight;
+    drawWidth = drawHeight * imgRatio;
+  } else {
+    // Image is taller than canvas (relative to width)
+    drawWidth = canvasWidth;
+    drawHeight = drawWidth / imgRatio;
+  }
+
+  // Calculate the maximum allowed offsets
+  const maxOffsetX = Math.max(0, (drawWidth - canvasWidth) / 2);
+  const maxOffsetY = Math.max(0, (drawHeight - canvasHeight) / 2);
+
+  // Constrain the offsets directly during drag
+  imageOffsetX.value = Math.max(
+    -maxOffsetX * 2,
+    Math.min(maxOffsetX * 2, newOffsetX)
+  );
+  imageOffsetY.value = Math.max(
+    -maxOffsetY * 2,
+    Math.min(maxOffsetY * 2, newOffsetY)
+  );
 
   // Redraw the image with the new offset
   drawImage();
