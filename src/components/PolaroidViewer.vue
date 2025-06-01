@@ -26,6 +26,17 @@
           ></canvas>
         </div>
 
+        <div
+          class="drag-hint"
+          v-if="hasImage"
+          :style="{
+            opacity: hasImage ? 1 : 0,
+            visibility: hasImage ? 'visible' : 'hidden',
+          }"
+        >
+          <span class="hint-text">Drag to position image</span>
+        </div>
+
         <!-- Custom file input with message and icon -->
         <div
           class="file-input-container"
@@ -2440,6 +2451,33 @@ body::before {
   .filter-button {
     padding: 4px 8px;
     font-size: 0.7rem;
+  }
+}
+
+.drag-hint {
+  position: absolute;
+  bottom: 50%;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.6);
+  color: white;
+  padding: 5px 10px;
+  border-radius: 15px;
+  font-size: 12px;
+  pointer-events: none;
+  transition: opacity 0.3s;
+  z-index: 1000;
+  animation: fadeOut 3s forwards;
+  animation-delay: 3s;
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    visibility: hidden;
   }
 }
 </style>
