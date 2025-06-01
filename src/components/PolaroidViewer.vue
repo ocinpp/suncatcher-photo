@@ -281,6 +281,7 @@ const dragStartX = ref(0);
 const dragStartY = ref(0);
 const imageOffsetX = ref(0);
 const imageOffsetY = ref(0);
+const wasDragging = ref(false);
 
 // Canvas and effect variables
 let ctx = null;
@@ -610,10 +611,19 @@ function triggerFileInput(e) {
   // Prevent default if it's a button click
   if (e) e.preventDefault();
 
+  // Don't trigger file input if we just finished dragging
+  if (wasDragging.value) {
+    return;
+  }
+
   // Only trigger file input if we're not clicking in the message area
   if (e && e.target === messageInput.value) return;
 
-  imageInput.value.click();
+  // Reset the file input to ensure onChange fires even with the same file
+  if (imageInput.value) {
+    imageInput.value.value = "";
+    imageInput.value.click();
+  }
 }
 
 function handleImageUpload(e) {
@@ -1948,6 +1958,7 @@ function startDrag(e) {
 
   // Set dragging state
   isDragging.value = true;
+  wasDragging.value = false;
   dragStartX.value = event.clientX - imageOffsetX.value;
   dragStartY.value = event.clientY - imageOffsetY.value;
 }
@@ -1959,8 +1970,22 @@ function onDrag(e) {
   const event = e.touches ? e.touches[0] : e;
 
   // Calculate new offset
-  imageOffsetX.value = event.clientX - dragStartX.value;
-  imageOffsetY.value = event.clientY - dragStartY.value;
+  const newOffsetX = event.clientX - dragStartX.value;
+  const newOffsetY = event.clientY - dragStartY.value;
+
+  // Check if we've moved enough to consider it a drag
+  const dragDistance = Math.sqrt(
+    Math.pow(newOffsetX - imageOffsetX.value, 2) +
+      Math.pow(newOffsetY - imageOffsetY.value, 2)
+  );
+
+  if (dragDistance > 5) {
+    wasDragging.value = true;
+  }
+
+  // Update offsets
+  imageOffsetX.value = newOffsetX;
+  imageOffsetY.value = newOffsetY;
 
   // Redraw the image with the new offset
   drawImage();
