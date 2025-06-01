@@ -608,7 +608,6 @@ function resizeCanvas() {
 }
 
 function triggerFileInput(e) {
-  console.log("triggerFileInput called");
   // Prevent default if it's a button click
   if (e) e.preventDefault();
 
@@ -628,7 +627,6 @@ function triggerFileInput(e) {
 }
 
 function handleImageUpload(e) {
-  console.log("handleImageUpload called");
   const file = e.target.files[0];
   if (file) {
     // Show loading state
@@ -1956,7 +1954,9 @@ function drawExpiredFilmEffect() {
 // Add these functions for drag functionality
 function startDrag(e) {
   // Only allow dragging if we have an image
-  if (!hasImage.value) return;
+  if (!hasImage.value) {
+    return;
+  }
 
   // Prevent default behavior to avoid scrolling on mobile
   e.preventDefault();
