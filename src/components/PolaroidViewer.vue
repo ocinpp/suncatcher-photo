@@ -608,6 +608,7 @@ function resizeCanvas() {
 }
 
 function triggerFileInput(e) {
+  console.log("triggerFileInput called");
   // Prevent default if it's a button click
   if (e) e.preventDefault();
 
@@ -627,6 +628,7 @@ function triggerFileInput(e) {
 }
 
 function handleImageUpload(e) {
+  console.log("handleImageUpload called");
   const file = e.target.files[0];
   if (file) {
     // Show loading state
@@ -655,6 +657,11 @@ function handleImageUpload(e) {
         hasImage.value = true;
         currentImageSrc.value = image.src; // Update reactive source
         isLoading.value = false;
+
+        // Reset drag offsets when loading a new image
+        imageOffsetX.value = 0;
+        imageOffsetY.value = 0;
+
         drawImage();
       };
       image.onerror = () => {
@@ -1950,7 +1957,7 @@ function startDrag(e) {
   // Only allow dragging if we have an image
   if (!hasImage.value) return;
 
-  // Prevent default behavior
+  // Prevent default behavior to avoid scrolling on mobile
   e.preventDefault();
 
   // Get the correct event (touch or mouse)
@@ -1958,13 +1965,16 @@ function startDrag(e) {
 
   // Set dragging state
   isDragging.value = true;
-  wasDragging.value = false;
+  wasDragging.value = false; // Reset the was-dragging flag
   dragStartX.value = event.clientX - imageOffsetX.value;
   dragStartY.value = event.clientY - imageOffsetY.value;
 }
 
 function onDrag(e) {
   if (!isDragging.value) return;
+
+  // Prevent default to stop scrolling on mobile
+  e.preventDefault();
 
   // Get the correct event (touch or mouse)
   const event = e.touches ? e.touches[0] : e;
@@ -2114,6 +2124,7 @@ body::before {
   contain: strict;
   cursor: move;
   cursor: grab;
+  touch-action: none; /* Prevent browser handling of touch events */
 }
 
 .canvas.draggable:active {
