@@ -185,12 +185,6 @@
       </div>
     </div>
   </div>
-
-  <!-- Add this to ensure the Inter font is loaded -->
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@100;400&display=swap"
-    rel="stylesheet"
-  />
 </template>
 
 <script setup>
@@ -2036,8 +2030,13 @@ function onDrag(e) {
   drawImage();
 }
 
-function endDrag() {
+function endDrag(e) {
   isDragging.value = false;
+
+  // single tap on mobile
+  if (e.type === "touchend" && wasDragging.value == false) {
+    triggerFileInput();
+  }
 }
 </script>
 
