@@ -248,6 +248,27 @@ const availableColours = [
     colour2: "indigo",
     colour3: "indigo",
   },
+  {
+    id: "pink",
+    name: "Pink",
+    colour1: "pink",
+    colour2: "blue",
+    colour3: "blue",
+  },
+  {
+    id: "gold",
+    name: "gold",
+    colour1: "#cca340",
+    colour2: "white",
+    colour3: "white",
+  },
+  {
+    id: "black",
+    name: "black",
+    colour1: "black",
+    colour2: "white",
+    colour3: "white",
+  },
 ];
 
 // Reactive state
