@@ -82,22 +82,37 @@
           visibility: hasImage ? 'visible' : 'hidden',
         }"
       >
-        <div class="colour-options">
-          <button
-            v-for="colour in availableColours"
-            :key="colour.id"
-            @click.stop="selectColour(colour)"
-            :class="{
-              active: currentColour.id === colour.id,
-            }"
-            :style="{
-              backgroundColor: colour.colour1,
-            }"
-            class="colour-button"
-          >
-            &nbsp;
-          </button>
+        <div
+          class="colour-options-wrapper"
+          ref="colourOptionsWrapper"
+          @scroll="handleColourScroll"
+        >
+          <div class="colour-options">
+            <button
+              v-for="colour in availableColours"
+              :key="colour.id"
+              @click.stop="selectColour(colour)"
+              :class="{
+                active: currentColour.id === colour.id,
+              }"
+              :style="{
+                backgroundColor: colour.colour1,
+              }"
+              class="colour-button"
+            >
+              &nbsp;
+            </button>
+          </div>
         </div>
+        <!-- Blur overlays for colour options -->
+        <div
+          class="scroll-blur-left"
+          :class="{ visible: colourScrollState.showLeftBlur }"
+        ></div>
+        <div
+          class="scroll-blur-right"
+          :class="{ visible: colourScrollState.showRightBlur }"
+        ></div>
       </div>
 
       <!-- Top row for all buttons -->
@@ -149,17 +164,32 @@
         }"
       >
         <div class="filter-options-container">
-          <div class="filter-options">
-            <button
-              v-for="filter in availableFilters"
-              :key="filter.id"
-              @click.stop="selectFilter(filter.id)"
-              :class="{ active: currentFilter === filter.id }"
-              class="filter-button"
-            >
-              {{ filter.name }}
-            </button>
+          <div
+            class="filter-options-wrapper"
+            ref="filterOptionsWrapper"
+            @scroll="handleFilterScroll"
+          >
+            <div class="filter-options">
+              <button
+                v-for="filter in availableFilters"
+                :key="filter.id"
+                @click.stop="selectFilter(filter.id)"
+                :class="{ active: currentFilter === filter.id }"
+                class="filter-button"
+              >
+                {{ filter.name }}
+              </button>
+            </div>
           </div>
+          <!-- Blur overlays for filter options -->
+          <div
+            class="scroll-blur-left"
+            :class="{ visible: filterScrollState.showLeftBlur }"
+          ></div>
+          <div
+            class="scroll-blur-right"
+            :class="{ visible: filterScrollState.showRightBlur }"
+          ></div>
         </div>
 
         <!-- Filter intensity slider container - always present but conditionally visible -->
@@ -249,11 +279,25 @@ const availableColours = [
     colour3: "indigo",
   },
   {
+    id: "skyblue",
+    name: "Skyblue",
+    colour1: "#2184c0",
+    colour2: "white",
+    colour3: "white",
+  },
+  {
     id: "pink",
     name: "Pink",
     colour1: "pink",
     colour2: "blue",
     colour3: "blue",
+  },
+  {
+    id: "silver",
+    name: "Silver",
+    colour1: "#c0c0c0",
+    colour2: "black",
+    colour3: "black",
   },
   {
     id: "gold",
@@ -276,6 +320,8 @@ const polaroid = ref(null);
 const canvas = ref(null);
 const imageInput = ref(null);
 const messageInput = ref(null);
+const colourOptionsWrapper = ref(null);
+const filterOptionsWrapper = ref(null);
 const hasImage = ref(false);
 const isLoading = ref(false);
 const userMessage = ref("");
@@ -286,6 +332,17 @@ const currentFilter = ref("none"); // Default filter is none
 const filterIntensity = ref(50); // Default intensity (1-100)
 const filtersEnabled = ref(true); // New state for filter toggle
 const currentColour = ref(availableColours[0]); // Default colour is the first one
+
+// Scroll state for blur effects
+const colourScrollState = ref({
+  showLeftBlur: false,
+  showRightBlur: false,
+});
+
+const filterScrollState = ref({
+  showLeftBlur: false,
+  showRightBlur: false,
+});
 let backgroundCanvas = null;
 // let originalImageData = null; // Store original image data for filters
 let processingCanvas = null; // For complex filter processing
@@ -461,9 +518,19 @@ onMounted(() => {
     }
   });
 
+  // Watch for image loading to initialize scroll states
+  watch(hasImage, (newValue) => {
+    if (newValue) {
+      nextTick(() => {
+        initializeScrollStates();
+      });
+    }
+  });
+
   // Initialize horizontal scrolling for filter options
   nextTick(() => {
     initializeHorizontalScroll();
+    initializeScrollStates();
   });
 });
 
@@ -479,6 +546,37 @@ function initializeHorizontalScroll() {
       }
     });
   }
+}
+
+// Check scroll state for blur effects
+function checkScrollState(wrapper, scrollState) {
+  if (!wrapper) return;
+
+  const { scrollLeft, scrollWidth, clientWidth } = wrapper;
+
+  // Show left blur if scrolled right
+  scrollState.showLeftBlur = scrollLeft > 0;
+
+  // Show right blur if there's more content to scroll
+  scrollState.showRightBlur = scrollLeft < scrollWidth - clientWidth - 1; // -1 for rounding
+}
+
+// Handle colour options scroll
+function handleColourScroll() {
+  checkScrollState(colourOptionsWrapper.value, colourScrollState.value);
+}
+
+// Handle filter options scroll
+function handleFilterScroll() {
+  checkScrollState(filterOptionsWrapper.value, filterScrollState.value);
+}
+
+// Initialize scroll states
+function initializeScrollStates() {
+  nextTick(() => {
+    checkScrollState(colourOptionsWrapper.value, colourScrollState.value);
+    checkScrollState(filterOptionsWrapper.value, filterScrollState.value);
+  });
 }
 
 // Clean up event listeners
@@ -544,9 +642,10 @@ function handleResize() {
   setInitialDimensions();
   resizeCanvas();
 
-  // Re-initialize horizontal scrolling after resize
+  // Re-initialize horizontal scrolling and scroll states after resize
   nextTick(() => {
     initializeHorizontalScroll();
+    initializeScrollStates();
   });
 }
 
@@ -2382,14 +2481,19 @@ body::before {
 .filter-options-container {
   width: 100%;
   max-width: var(--polaroid-width);
+  position: relative;
+  margin-bottom: 10px;
+}
+
+.filter-options-wrapper {
+  width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE and Edge */
-  margin-bottom: 10px;
 }
 
-.filter-options-container::-webkit-scrollbar {
+.filter-options-wrapper::-webkit-scrollbar {
   display: none; /* Chrome, Safari, Opera */
 }
 
@@ -2486,21 +2590,26 @@ body::before {
 
 .colour-options-container {
   width: 100%;
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.colour-options-wrapper {
+  width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE and Edge */
-  margin-bottom: 12px;
 }
 
-.colour-options-container::-webkit-scrollbar {
+.colour-options-wrapper::-webkit-scrollbar {
   display: none; /* Chrome, Safari, Opera */
 }
 
 .colour-options {
   display: flex;
   flex-wrap: nowrap;
-  gap: 8px;
+  gap: 10px;
   padding: 2px 0;
   min-width: min-content;
   justify-content: space-between;
@@ -2529,6 +2638,61 @@ body::before {
   background-color: rgba(0, 0, 0, 0.9);
   border-color: rgba(255, 255, 255, 0.7);
   font-weight: bold;
+}
+
+/* Blur overlay styles for horizontal scrolling using mask-image */
+.scroll-blur-left,
+.scroll-blur-right {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 30px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: 10;
+  backdrop-filter: blur(2px);
+}
+
+.scroll-blur-left {
+  left: 0;
+  mask-image: linear-gradient(
+    to right,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 0.8) 40%,
+    rgba(0, 0, 0, 0.4) 70%,
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 0.8) 40%,
+    rgba(0, 0, 0, 0.4) 70%,
+    transparent 100%
+  );
+}
+
+.scroll-blur-right {
+  right: 0;
+  mask-image: linear-gradient(
+    to left,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 0.8) 40%,
+    rgba(0, 0, 0, 0.4) 70%,
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to left,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 0.8) 40%,
+    rgba(0, 0, 0, 0.4) 70%,
+    transparent 100%
+  );
+}
+
+.scroll-blur-left.visible,
+.scroll-blur-right.visible {
+  opacity: 1;
 }
 
 /* Responsive adjustments */
