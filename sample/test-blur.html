@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blur Effect Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #222;
+            color: white;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .scroll-container {
+            position: relative;
+            margin: 20px 0;
+        }
+
+        .scroll-wrapper {
+            width: 100%;
+            overflow-x: auto;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+
+        .scroll-wrapper::-webkit-scrollbar {
+            display: none;
+        }
+
+        .scroll-content {
+            display: flex;
+            flex-wrap: nowrap;
+            gap: 8px;
+            padding: 4px 0;
+            min-width: min-content;
+        }
+
+        .scroll-item {
+            background-color: rgba(0, 0, 0, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            padding: 8px 15px;
+            color: white;
+            white-space: nowrap;
+            flex-shrink: 0;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .scroll-item:hover {
+            background-color: rgba(0, 0, 0, 0.8);
+            border-color: rgba(255, 255, 255, 0.4);
+        }
+
+        .scroll-item.active {
+            background-color: rgba(0, 0, 0, 0.9);
+            border-color: rgba(255, 255, 255, 0.7);
+            font-weight: bold;
+        }
+
+        /* Blur overlay styles using mask-image */
+        .scroll-blur-left,
+        .scroll-blur-right {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 30px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: 10;
+            backdrop-filter: blur(2px);
+        }
+
+        .scroll-blur-left {
+            left: 0;
+            mask-image: linear-gradient(
+                to right,
+                rgba(0, 0, 0, 1) 0%,
+                rgba(0, 0, 0, 0.8) 40%,
+                rgba(0, 0, 0, 0.4) 70%,
+                transparent 100%
+            );
+            -webkit-mask-image: linear-gradient(
+                to right,
+                rgba(0, 0, 0, 1) 0%,
+                rgba(0, 0, 0, 0.8) 40%,
+                rgba(0, 0, 0, 0.4) 70%,
+                transparent 100%
+            );
+        }
+
+        .scroll-blur-right {
+            right: 0;
+            mask-image: linear-gradient(
+                to left,
+                rgba(0, 0, 0, 1) 0%,
+                rgba(0, 0, 0, 0.8) 40%,
+                rgba(0, 0, 0, 0.4) 70%,
+                transparent 100%
+            );
+            -webkit-mask-image: linear-gradient(
+                to left,
+                rgba(0, 0, 0, 1) 0%,
+                rgba(0, 0, 0, 0.8) 40%,
+                rgba(0, 0, 0, 0.4) 70%,
+                transparent 100%
+            );
+        }
+
+        .scroll-blur-left.visible,
+        .scroll-blur-right.visible {
+            opacity: 1;
+        }
+
+        h2 {
+            margin-top: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Horizontal Scroll Blur Effect Test</h1>
+        
+        <h2>Color Options</h2>
+        <div class="scroll-container">
+            <div class="scroll-wrapper" id="colorWrapper">
+                <div class="scroll-content">
+                    <div class="scroll-item active">Original</div>
+                    <div class="scroll-item">Red</div>
+                    <div class="scroll-item">Orange</div>
+                    <div class="scroll-item">Yellow</div>
+                    <div class="scroll-item">Green</div>
+                    <div class="scroll-item">Blue</div>
+                    <div class="scroll-item">Indigo</div>
+                    <div class="scroll-item">Violet</div>
+                    <div class="scroll-item">Pink</div>
+                    <div class="scroll-item">Gold</div>
+                    <div class="scroll-item">Black</div>
+                </div>
+            </div>
+            <div class="scroll-blur-left" id="colorBlurLeft"></div>
+            <div class="scroll-blur-right" id="colorBlurRight"></div>
+        </div>
+
+        <h2>Filter Options</h2>
+        <div class="scroll-container">
+            <div class="scroll-wrapper" id="filterWrapper">
+                <div class="scroll-content">
+                    <div class="scroll-item active">Normal</div>
+                    <div class="scroll-item">B&W</div>
+                    <div class="scroll-item">Sepia</div>
+                    <div class="scroll-item">Vintage</div>
+                    <div class="scroll-item">High Contrast</div>
+                    <div class="scroll-item">Blur</div>
+                    <div class="scroll-item">Invert</div>
+                    <div class="scroll-item">Duotone</div>
+                    <div class="scroll-item">Oil Paint</div>
+                    <div class="scroll-item">Pixelate</div>
+                    <div class="scroll-item">Glitch</div>
+                    <div class="scroll-item">Watercolor</div>
+                    <div class="scroll-item">Emboss</div>
+                    <div class="scroll-item">Posterize</div>
+                    <div class="scroll-item">Halftone</div>
+                </div>
+            </div>
+            <div class="scroll-blur-left" id="filterBlurLeft"></div>
+            <div class="scroll-blur-right" id="filterBlurRight"></div>
+        </div>
+
+        <p>Scroll horizontally in the containers above to see the blur effects on the edges when content overflows.</p>
+    </div>
+
+    <script>
+        function checkScrollState(wrapper, leftBlur, rightBlur) {
+            if (!wrapper) return;
+            
+            const { scrollLeft, scrollWidth, clientWidth } = wrapper;
+            
+            // Show left blur if scrolled right
+            const showLeftBlur = scrollLeft > 0;
+            
+            // Show right blur if there's more content to scroll
+            const showRightBlur = scrollLeft < scrollWidth - clientWidth - 1;
+            
+            leftBlur.classList.toggle('visible', showLeftBlur);
+            rightBlur.classList.toggle('visible', showRightBlur);
+        }
+
+        function initializeScrollContainer(wrapperId, leftBlurId, rightBlurId) {
+            const wrapper = document.getElementById(wrapperId);
+            const leftBlur = document.getElementById(leftBlurId);
+            const rightBlur = document.getElementById(rightBlurId);
+            
+            if (!wrapper || !leftBlur || !rightBlur) return;
+            
+            // Initial check
+            checkScrollState(wrapper, leftBlur, rightBlur);
+            
+            // Add scroll listener
+            wrapper.addEventListener('scroll', () => {
+                checkScrollState(wrapper, leftBlur, rightBlur);
+            });
+            
+            // Add resize listener to recalculate on window resize
+            window.addEventListener('resize', () => {
+                checkScrollState(wrapper, leftBlur, rightBlur);
+            });
+        }
+
+        // Initialize both scroll containers
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeScrollContainer('colorWrapper', 'colorBlurLeft', 'colorBlurRight');
+            initializeScrollContainer('filterWrapper', 'filterBlurLeft', 'filterBlurRight');
+        });
+    </script>
+</body>
+</html>
