@@ -861,6 +861,13 @@ function createResizedBackground(imageSrc) {
 function handleDeviceOrientation(e) {
   tiltX = Math.min(Math.max(e.gamma / 30, -1), 1);
   tiltY = Math.min(Math.max(e.beta / 30, -1), 1);
+
+  // Temporary debugging - remove this later
+  if (Math.abs(tiltX) > 0.1 || Math.abs(tiltY) > 0.1) {
+    console.log(
+      `Tilt detected - X: ${tiltX.toFixed(2)}, Y: ${tiltY.toFixed(2)}`
+    );
+  }
 }
 
 function createNoiseTexture(width, height) {
@@ -1472,7 +1479,7 @@ function drawImage() {
     applyFilter(ctx, currentFilter.value, canvasWidth, canvasHeight);
   }
 
-  // drawLightLeakEffect();
+  drawEnhancedIridescentEffect();
   drawExpiredFilmEffect();
 
   // Apply special effects after the filter
@@ -1878,6 +1885,164 @@ function drawLightLeakEffect() {
     );
     ctx.closePath();
     ctx.fill();
+  });
+
+  ctx.globalCompositeOperation = "source-over";
+  ctx.restore();
+}
+
+// Enhanced Iridescent Effect - Inspired by React implementation
+function drawEnhancedIridescentEffect() {
+  if (!ctx || !canvas.value) return;
+
+  ctx.save();
+  ctx.globalCompositeOperation = "screen"; // Lighter than soft-light but not as intense as lighter
+
+  // Calculate effect intensity and settings
+  const tiltIntensity = Math.min(Math.abs(tiltX) + Math.abs(tiltY), 1);
+  const intensity = tiltIntensity;
+  const iridescentIntensity = 0.3; // Reduced from 0.8 for subtlety
+  const lightWidth = 0.5; // Can be made configurable later
+  const iridescentRainbow = true; // Can be made configurable later
+
+  // Skip effect if no tilt intensity
+  if (intensity < 0.05) {
+    ctx.restore();
+    return;
+  }
+
+  // Create multiple rainbow gradients at different angles and positions
+  const diagonal = Math.sqrt(
+    canvas.value.width * canvas.value.width +
+      canvas.value.height * canvas.value.height
+  );
+  const baseOpacity = intensity * iridescentIntensity * 0.4; // Reduced from 0.8
+
+  // Generate cached streaks to prevent flickering
+  if (!window.iridescentStreakCache) {
+    window.iridescentStreakCache = [];
+    for (let i = 0; i < 8; i++) {
+      const streakWidth =
+        Math.max(canvas.value.width, canvas.value.height) *
+        lightWidth *
+        (0.05 + Math.random() * 0.1);
+      const opacityMultiplier = 0.4 + Math.random() * 0.6;
+      const offset = (Math.random() - 0.5) * 200 * lightWidth;
+      const angleVariation = (Math.random() - 0.5) * 0.2;
+      window.iridescentStreakCache.push({
+        streakWidth,
+        opacityMultiplier,
+        offset,
+        angleVariation,
+      });
+    }
+  }
+
+  // Determine light source position based on tilt (from edges)
+  let lightSourceX, lightSourceY, lightAngle;
+
+  // Default to top-left corner if no significant tilt
+  if (Math.abs(tiltX) < 0.1 && Math.abs(tiltY) < 0.1) {
+    lightSourceX = 0;
+    lightSourceY = 0;
+    lightAngle = Math.PI / 4; // 45 degrees down-right
+  } else if (Math.abs(tiltX) > Math.abs(tiltY)) {
+    // Horizontal tilt dominates
+    if (tiltX > 0) {
+      // Tilted right - light from left edge
+      lightSourceX = 0;
+      lightSourceY =
+        canvas.value.height / 2 + tiltY * canvas.value.height * 0.3;
+      lightAngle = 0; // Point right
+    } else {
+      // Tilted left - light from right edge
+      lightSourceX = canvas.value.width;
+      lightSourceY =
+        canvas.value.height / 2 + tiltY * canvas.value.height * 0.3;
+      lightAngle = Math.PI; // Point left
+    }
+  } else {
+    // Vertical tilt dominates
+    if (tiltY > 0) {
+      // Tilted forward - light from top edge
+      lightSourceX = canvas.value.width / 2 + tiltX * canvas.value.width * 0.3;
+      lightSourceY = 0;
+      lightAngle = Math.PI / 2; // Point down
+    } else {
+      // Tilted back - light from bottom edge
+      lightSourceX = canvas.value.width / 2 + tiltX * canvas.value.width * 0.3;
+      lightSourceY = canvas.value.height;
+      lightAngle = -Math.PI / 2; // Point up
+    }
+  }
+
+  // Draw cached streaks
+  window.iridescentStreakCache.forEach((streak) => {
+    const opacity = baseOpacity * streak.opacityMultiplier;
+
+    ctx.save();
+    ctx.translate(
+      lightSourceX + streak.offset * Math.cos(lightAngle + Math.PI / 2),
+      lightSourceY + streak.offset * Math.sin(lightAngle + Math.PI / 2)
+    );
+    ctx.rotate(lightAngle + streak.angleVariation);
+
+    let streakGradient;
+
+    if (iridescentRainbow) {
+      // Create rainbow gradient along the length of the streak
+      streakGradient = ctx.createLinearGradient(0, 0, diagonal * 0.6, 0);
+
+      // Create rainbow spectrum (ROYGBIV progression)
+      streakGradient.addColorStop(0, `rgba(255, 0, 128, 0)`);
+      streakGradient.addColorStop(0.1, `rgba(255, 0, 128, ${opacity})`); // Pink
+      streakGradient.addColorStop(0.2, `rgba(255, 64, 0, ${opacity})`); // Red-Orange
+      streakGradient.addColorStop(0.3, `rgba(255, 128, 0, ${opacity})`); // Orange
+      streakGradient.addColorStop(0.4, `rgba(255, 255, 0, ${opacity})`); // Yellow
+      streakGradient.addColorStop(0.5, `rgba(128, 255, 0, ${opacity})`); // Yellow-Green
+      streakGradient.addColorStop(0.6, `rgba(0, 255, 128, ${opacity})`); // Green-Cyan
+      streakGradient.addColorStop(0.7, `rgba(0, 128, 255, ${opacity})`); // Cyan-Blue
+      streakGradient.addColorStop(0.8, `rgba(128, 0, 255, ${opacity})`); // Blue-Purple
+      streakGradient.addColorStop(0.9, `rgba(255, 0, 255, ${opacity})`); // Purple-Pink
+      streakGradient.addColorStop(1, `rgba(255, 0, 255, 0)`);
+    } else {
+      // Create single color gradient
+      const hue = Math.random() * 360;
+      const saturation = 80 + Math.random() * 20;
+      const lightness = 50 + Math.random() * 30;
+
+      streakGradient = ctx.createLinearGradient(0, 0, diagonal * 0.6, 0);
+      streakGradient.addColorStop(
+        0,
+        `hsla(${hue}, ${saturation}%, ${lightness}%, 0)`
+      );
+      streakGradient.addColorStop(
+        0.1,
+        `hsla(${hue}, ${saturation}%, ${lightness}%, ${opacity})`
+      );
+      streakGradient.addColorStop(
+        0.5,
+        `hsla(${hue}, ${saturation}%, ${lightness}%, ${opacity * 0.8})`
+      );
+      streakGradient.addColorStop(
+        0.9,
+        `hsla(${hue}, ${saturation}%, ${lightness}%, ${opacity})`
+      );
+      streakGradient.addColorStop(
+        1,
+        `hsla(${hue}, ${saturation}%, ${lightness}%, 0)`
+      );
+    }
+
+    ctx.fillStyle = streakGradient;
+    ctx.fillRect(
+      0,
+      -streak.streakWidth / 2,
+      diagonal * 0.6,
+      streak.streakWidth
+    );
+
+    ctx.restore();
   });
 
   ctx.globalCompositeOperation = "source-over";
